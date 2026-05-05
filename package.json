@@ -1,0 +1,14 @@
+{
+  "name": "to-assistant-logs",
+  "version": "1.0.0",
+  "description": "Conversation log dashboard for the 3 TO Assistant chatbots (tennis/padel/pickleball)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}

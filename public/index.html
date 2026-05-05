@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TO Assistant — Conversation Logs</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2129;
+    --border: #2a3440;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --tennis: #d4ff5e;
+    --padel: #ff8a3d;
+    --pickleball: #ffd23f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .stats { color: var(--muted); font-size: 13px; }
+  header .stats strong { color: var(--text); }
+  .controls {
+    padding: 12px 24px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .controls select, .controls input[type=text] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .controls input[type=text] { min-width: 280px; }
+  .controls label { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .controls button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .controls button:hover { opacity: 0.9; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .pill.tennis { background: rgba(212, 255, 94, 0.15); color: var(--tennis); border: 1px solid rgba(212, 255, 94, 0.4); }
+  .pill.padel { background: rgba(255, 138, 61, 0.15); color: var(--padel); border: 1px solid rgba(255, 138, 61, 0.4); }
+  .pill.pickleball { background: rgba(255, 210, 63, 0.15); color: var(--pickleball); border: 1px solid rgba(255, 210, 63, 0.4); }
+  .pill.unknown { background: rgba(139, 148, 158, 0.15); color: var(--muted); border: 1px solid var(--border); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead th {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  td.time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 12px; }
+  td.query, td.response {
+    max-width: 480px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  td.response { color: var(--muted); }
+  td.intent { color: var(--accent); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
+  .empty {
+    padding: 60px 24px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .empty code {
+    background: var(--panel);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .truncate { max-height: 4.2em; overflow: hidden; position: relative; cursor: pointer; }
+  .truncate.expanded { max-height: none; }
+  .truncate::after {
+    content: '';
+    position: absolute;
+    bottom: 0; right: 0; left: 0; height: 1.5em;
+    background: linear-gradient(transparent, var(--bg));
+    pointer-events: none;
+  }
+  .truncate.expanded::after { display: none; }
+  footer {
+    padding: 12px 24px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  .live-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #3fb950; margin-right: 6px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>TO Assistant — Conversation Logs</h1>
+  <div class="stats">
+    <span class="live-dot"></span>
+    <strong id="stat-total">0</strong> received ·
+    <strong id="stat-buffer">0</strong> in buffer ·
+    auto-refresh every <strong>5s</strong>
+  </div>
+</header>
+
+<div class="controls">
+  <label>Sport
+    <select id="sport">
+      <option value="">All</option>
+      <option value="tennis">Tennis</option>
+      <option value="padel">Padel</option>
+      <option value="pickleball">Pickleball</option>
+    </select>
+  </label>
+  <label>Search
+    <input type="text" id="search" placeholder="Search query, response, intent, session…" />
+  </label>
+  <label>Limit
+    <select id="limit">
+      <option value="50">50</option>
+      <option value="200" selected>200</option>
+      <option value="500">500</option>
+      <option value="2000">2000</option>
+    </select>
+  </label>
+  <button id="refresh">Refresh now</button>
+  <label><input type="checkbox" id="autoRefresh" checked /> Auto</label>
+</div>
+
+<table id="logTable">
+  <thead>
+    <tr>
+      <th style="width:140px">Time</th>
+      <th style="width:90px">Sport</th>
+      <th style="width:120px">Intent</th>
+      <th>User query</th>
+      <th>AI response</th>
+    </tr>
+  </thead>
+  <tbody id="logBody"></tbody>
+</table>
+
+<div id="empty" class="empty" style="display:none;">
+  No conversations logged yet. Once a customer chats with one of the bots, rows will appear here within seconds.
+  <br /><br />
+  Quick test: <code>curl https://&lt;this-host&gt;/debug/test?sport=tennis</code>
+</div>
+
+<footer>
+  TO Assistant Logs · in-memory (last <span id="ft-max">5000</span>) ·
+  <a href="/api/health">/api/health</a> ·
+  <a href="/api/logs">/api/logs</a> ·
+  <a href="/debug/test">/debug/test</a>
+</footer>
+
+<script>
+const sportSel = document.getElementById('sport');
+const searchInp = document.getElementById('search');
+const limitSel = document.getElementById('limit');
+const refreshBtn = document.getElementById('refresh');
+const autoRefresh = document.getElementById('autoRefresh');
+const tbody = document.getElementById('logBody');
+const empty = document.getElementById('empty');
+
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) +
+         ' · ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function load() {
+  const params = new URLSearchParams();
+  if (sportSel.value) params.set('sport', sportSel.value);
+  if (searchInp.value.trim()) params.set('q', searchInp.value.trim());
+  params.set('limit', limitSel.value);
+
+  try {
+    const r = await fetch('/api/logs?' + params.toString());
+    const d = await r.json();
+    document.getElementById('stat-total').textContent = d.total_received.toLocaleString();
+    document.getElementById('stat-buffer').textContent = d.total_in_buffer.toLocaleString();
+
+    if (!d.logs.length) {
+      tbody.innerHTML = '';
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+    tbody.innerHTML = d.logs.map(l => `
+      <tr>
+        <td class="time">${esc(fmtTime(l.timestamp))}</td>
+        <td><span class="pill ${esc(l.sport)}">${esc(l.sport)}</span></td>
+        <td class="intent">${esc(l.intent || '—')}</td>
+        <td class="query"><div class="truncate" onclick="this.classList.toggle('expanded')">${esc(l.user_query)}</div></td>
+        <td class="response"><div class="truncate" onclick="this.classList.toggle('expanded')">${esc(l.ai_response)}</div></td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" style="color:#ff6b6b;padding:20px;">Failed to load logs: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+let timer = null;
+function startTimer() {
+  stopTimer();
+  if (autoRefresh.checked) timer = setInterval(load, 5000);
+}
+function stopTimer() { if (timer) clearInterval(timer); timer = null; }
+
+refreshBtn.addEventListener('click', load);
+autoRefresh.addEventListener('change', () => autoRefresh.checked ? startTimer() : stopTimer());
+sportSel.addEventListener('change', load);
+limitSel.addEventListener('change', load);
+let searchT = null;
+searchInp.addEventListener('input', () => {
+  clearTimeout(searchT);
+  searchT = setTimeout(load, 300);
+});
+
+fetch('/api/health').then(r => r.json()).then(d => {
+  document.getElementById('ft-max').textContent = (d.max_entries || 5000).toLocaleString();
+});
+
+load();
+startTimer();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: to-assistant-logs
+    runtime: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
+      - key: MAX_ENTRIES
+        value: 5000
+      - key: ADMIN_KEY
+        sync: false
