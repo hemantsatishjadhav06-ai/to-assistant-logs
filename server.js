@@ -14,11 +14,19 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MAX_ENTRIES = parseInt(process.env.MAX_ENTRIES || '5000', 10);
+const MAX_ENTRIES = parseInt(process.env.MAX_ENTRIES || '50000', 10);  // bumped — disk-backed now
 const ADMIN_KEY = process.env.ADMIN_KEY || '';
+
+// Persistence: data dir survives redeploys IF a Render disk is mounted there.
+// Without a disk, falls back to ephemeral local dir (data lost on redeploy).
+const DATA_DIR = process.env.LOGS_DATA_DIR || path.join(__dirname, 'data');
+const LOGS_FILE = path.join(DATA_DIR, 'logs.jsonl');
+const STATE_FILE = path.join(DATA_DIR, 'state.json');
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
 
 app.set('trust proxy', 1);
 app.use(cors());
@@ -28,15 +36,99 @@ const logs = [];
 let totalReceived = 0;
 const startTime = new Date();
 
-// ===== AI toggle + handoff state (in-memory) =====
+// ===== AI toggle + handoff state (in-memory, persisted to disk) =====
+// IMPORTANT: defaults are ALL ON. New sessions default to AI on — operator
+// must explicitly toggle a customer or sport off. This is locked in by
+// merging persisted state ON TOP of defaults rather than replacing them.
 const aiState = {
-  global: { tennis: 'on', padel: 'on', pickleball: 'on' },
-  perCustomer: {}  // sessionId -> 'on' | 'off'
+  global: { tennis: 'on', padel: 'on', pickleball: 'on' },  // DEFAULT: ON
+  perCustomer: {}  // empty by default — every new session inherits global=on
 };
-const pendingReplies = {};   // sessionId -> [{id, text, agent_name, timestamp, delivered_at}]
-const notifications = [];    // [{id, session_id, sport, type, timestamp, status}]
+const pendingReplies = {};
+const notifications = [];
 let pendingReplyId = 0;
 let notificationId = 0;
+
+// ----- Load persisted logs + state on boot -----
+function loadFromDisk() {
+  // Logs (one JSON object per line)
+  if (fs.existsSync(LOGS_FILE)) {
+    try {
+      const raw = fs.readFileSync(LOGS_FILE, 'utf8');
+      const lines = raw.split('\n').filter(Boolean);
+      let loaded = 0;
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+          logs.push(entry);
+          if (entry.id && entry.id > totalReceived) totalReceived = entry.id;
+          loaded++;
+        } catch (_) {}
+      }
+      while (logs.length > MAX_ENTRIES) logs.shift();
+      console.log(`[persist] loaded ${loaded} log entries from disk (totalReceived=${totalReceived})`);
+    } catch (e) {
+      console.warn('[persist] failed to load logs:', e.message);
+    }
+  } else {
+    console.log('[persist] no logs file found — starting fresh');
+  }
+
+  // State (toggles + notifications)
+  if (fs.existsSync(STATE_FILE)) {
+    try {
+      const s = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      // Merge global on top of defaults — keeps tennis/padel/pickleball=on
+      // unless explicitly persisted as 'off'.
+      if (s.aiState && s.aiState.global) {
+        for (const sport of Object.keys(aiState.global)) {
+          if (s.aiState.global[sport] === 'on' || s.aiState.global[sport] === 'off') {
+            aiState.global[sport] = s.aiState.global[sport];
+          }
+        }
+      }
+      // Per-customer overrides — full replace (only persisted ones survive)
+      if (s.aiState && s.aiState.perCustomer) {
+        Object.assign(aiState.perCustomer, s.aiState.perCustomer);
+      }
+      // Notifications — restore unread alerts
+      if (Array.isArray(s.notifications)) {
+        notifications.push(...s.notifications);
+        notificationId = Math.max(notificationId, ...s.notifications.map(n => n.id || 0));
+      }
+      console.log(`[persist] loaded state — global=${JSON.stringify(aiState.global)}, perCustomer=${Object.keys(aiState.perCustomer).length} entries, notifications=${notifications.length}`);
+    } catch (e) {
+      console.warn('[persist] failed to load state:', e.message);
+    }
+  }
+}
+
+// ----- Save state to disk (debounced) -----
+let saveTimer = null;
+function saveStateDebounced() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      const tmp = STATE_FILE + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify({
+        aiState,
+        notifications: notifications.slice(-200)  // keep last 200
+      }, null, 2));
+      fs.renameSync(tmp, STATE_FILE);  // atomic
+    } catch (e) {
+      console.warn('[persist] save state failed:', e.message);
+    }
+  }, 300);
+}
+
+// ----- Append a single log line to disk (fire-and-forget) -----
+function appendLogToDisk(entry) {
+  fs.appendFile(LOGS_FILE, JSON.stringify(entry) + '\n', err => {
+    if (err) console.warn('[persist] append log failed:', err.message);
+  });
+}
+
+loadFromDisk();
 
 function resolveAiOn(sport, sessionId) {
   if (sessionId && aiState.perCustomer[sessionId] !== undefined) {
@@ -49,9 +141,12 @@ function resolveAiOn(sport, sessionId) {
 }
 
 function pushLog(entry) {
+  // Ensure entry id is monotonic — important after disk reload
+  if (!entry.id || entry.id <= totalReceived) entry.id = totalReceived + 1;
   logs.push(entry);
-  totalReceived += 1;
+  totalReceived = Math.max(totalReceived + 1, entry.id);
   while (logs.length > MAX_ENTRIES) logs.shift();
+  appendLogToDisk(entry);
 }
 
 app.post('/log', (req, res) => {
@@ -154,14 +249,23 @@ app.get('/api/logs', (req, res) => {
 
 app.get('/api/health', (req, res) => {
   const pendingReplyCount = Object.values(pendingReplies).reduce((sum, arr) => sum + arr.filter(m => !m.delivered_at).length, 0);
+  let dataSize = null;
+  try {
+    if (fs.existsSync(LOGS_FILE)) dataSize = fs.statSync(LOGS_FILE).size;
+  } catch (_) {}
   res.json({
     status: 'running',
-    version: '2.0.0',
+    version: '2.1.0',
     started_at: startTime.toISOString(),
     uptime_sec: Math.floor((Date.now() - startTime.getTime()) / 1000),
     total_received: totalReceived,
     in_buffer: logs.length,
     max_entries: MAX_ENTRIES,
+    persistence: {
+      data_dir: DATA_DIR,
+      logs_file: LOGS_FILE,
+      logs_file_bytes: dataSize
+    },
     ai_state: {
       global: aiState.global,
       perCustomer_count: Object.keys(aiState.perCustomer).length
@@ -232,6 +336,7 @@ app.post('/api/toggle', (req, res) => {
   } else {
     aiState.perCustomer[id] = value;
   }
+  saveStateDebounced();
   console.log(`[toggle] ${scope}=${id} → ${value}`);
   res.json({ ok: true, scope, id, value });
 });
@@ -254,6 +359,7 @@ app.post('/api/customer-needs-human', (req, res) => {
   };
   notifications.push(notif);
   while (notifications.length > 500) notifications.shift();
+  saveStateDebounced();
   console.log(`[notify] ${notif.sport}/${session_id} requested human (type=${notif.type})`);
   res.json({ ok: true, notification_id: notif.id });
 });
@@ -320,6 +426,7 @@ app.post('/api/notifications/ack', (req, res) => {
   for (const n of notifications) {
     if (idSet.has(n.id) && n.status === 'unread') { n.status = 'read'; acked++; }
   }
+  if (acked) saveStateDebounced();
   res.json({ ok: true, acked });
 });
 
