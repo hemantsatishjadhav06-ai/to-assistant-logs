@@ -8,6 +8,7 @@
   :root {
     --bg: #0f1419;
     --panel: #1a2129;
+    --panel-2: #232c38;
     --border: #2a3440;
     --text: #e6edf3;
     --muted: #8b949e;
@@ -15,6 +16,11 @@
     --tennis: #d4ff5e;
     --padel: #ff8a3d;
     --pickleball: #ffd23f;
+    --human: #a371f7;
+    --bot: #58a6ff;
+    --user-bubble: #1f2937;
+    --bot-bubble: #1d3a5b;
+    --human-bubble: #3a1f5b;
   }
   * { box-sizing: border-box; }
   body {
@@ -25,13 +31,14 @@
     font-size: 14px;
   }
   header {
-    padding: 16px 24px;
+    padding: 14px 24px;
     border-bottom: 1px solid var(--border);
     background: var(--panel);
     display: flex;
     align-items: center;
     gap: 24px;
     flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 10;
   }
   header h1 { margin: 0; font-size: 18px; font-weight: 600; }
   header .stats { color: var(--muted); font-size: 13px; }
@@ -45,7 +52,7 @@
     align-items: center;
     flex-wrap: wrap;
   }
-  .controls select, .controls input[type=text] {
+  .controls select, .controls input[type=text], .controls input[type=date] {
     background: var(--bg);
     color: var(--text);
     border: 1px solid var(--border);
@@ -55,6 +62,7 @@
     font-family: inherit;
   }
   .controls input[type=text] { min-width: 280px; }
+  .controls input[type=date] { color-scheme: dark; }
   .controls label { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
   .controls button {
     background: var(--accent);
@@ -80,43 +88,70 @@
   .pill.padel { background: rgba(255, 138, 61, 0.15); color: var(--padel); border: 1px solid rgba(255, 138, 61, 0.4); }
   .pill.pickleball { background: rgba(255, 210, 63, 0.15); color: var(--pickleball); border: 1px solid rgba(255, 210, 63, 0.4); }
   .pill.unknown { background: rgba(139, 148, 158, 0.15); color: var(--muted); border: 1px solid var(--border); }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  thead th {
+  .pill.bot { background: rgba(88, 166, 255, 0.15); color: var(--bot); border: 1px solid rgba(88, 166, 255, 0.4); }
+  .pill.human { background: rgba(163, 113, 247, 0.15); color: var(--human); border: 1px solid rgba(163, 113, 247, 0.4); }
+
+  .conversations { padding: 16px 24px; display: flex; flex-direction: column; gap: 12px; }
+  .convo {
     background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    text-align: left;
-    padding: 10px 12px;
-    font-weight: 600;
-    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .convo-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--border);
     font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    position: sticky;
-    top: 0;
-    z-index: 1;
+    color: var(--muted);
   }
-  tbody td {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: top;
-  }
-  tbody tr:hover { background: rgba(255,255,255,0.02); }
-  td.time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 12px; }
-  td.query, td.response {
-    max-width: 480px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .convo-meta .date { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .convo-meta .time { font-variant-numeric: tabular-nums; }
+  .convo-meta .session { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
+  .convo-meta .intent { color: var(--accent); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
+  .convo-meta .endpoint { color: var(--muted); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
+  .convo-meta .agent-name { color: var(--human); font-weight: 500; }
+
+  .bubble-row { display: flex; gap: 10px; margin-bottom: 8px; }
+  .bubble-row.right { justify-content: flex-end; }
+  .bubble {
+    max-width: min(720px, 78%);
+    padding: 10px 14px;
+    border-radius: 14px;
+    line-height: 1.45;
     white-space: pre-wrap;
     word-wrap: break-word;
+    font-size: 13.5px;
   }
-  td.response { color: var(--muted); }
-  td.intent { color: var(--accent); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
+  .bubble.user {
+    background: var(--user-bubble);
+    border-bottom-right-radius: 4px;
+    border: 1px solid #374151;
+  }
+  .bubble.bot {
+    background: var(--bot-bubble);
+    border-bottom-left-radius: 4px;
+    border: 1px solid #2c4f7a;
+  }
+  .bubble.human {
+    background: var(--human-bubble);
+    border-bottom-left-radius: 4px;
+    border: 1px solid #5b3a8a;
+  }
+  .bubble-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
   .empty {
-    padding: 60px 24px;
+    padding: 80px 24px;
     text-align: center;
     color: var(--muted);
   }
@@ -126,32 +161,31 @@
     border-radius: 4px;
     font-size: 12px;
   }
-  .truncate { max-height: 4.2em; overflow: hidden; position: relative; cursor: pointer; }
-  .truncate.expanded { max-height: none; }
-  .truncate::after {
-    content: '';
-    position: absolute;
-    bottom: 0; right: 0; left: 0; height: 1.5em;
-    background: linear-gradient(transparent, var(--bg));
-    pointer-events: none;
-  }
-  .truncate.expanded::after { display: none; }
   footer {
-    padding: 12px 24px;
+    padding: 14px 24px;
     color: var(--muted);
     font-size: 12px;
     border-top: 1px solid var(--border);
+    margin-top: 20px;
   }
-  footer a { color: var(--accent); text-decoration: none; }
+  footer a { color: var(--accent); text-decoration: none; margin-right: 12px; }
   .live-dot {
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;
     background: #3fb950; margin-right: 6px;
     animation: pulse 2s ease-in-out infinite;
   }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+  .view-toggle button {
+    background: var(--panel-2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 6px;
   }
+  .view-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -174,9 +208,16 @@
       <option value="pickleball">Pickleball</option>
     </select>
   </label>
-  <label>Search
-    <input type="text" id="search" placeholder="Search query, response, intent, session…" />
+  <label>Source
+    <select id="source">
+      <option value="">All</option>
+      <option value="bot">AI bot only</option>
+      <option value="human">Human agent only (Zoho)</option>
+    </select>
   </label>
+  <label>Date from <input type="date" id="dateFrom" /></label>
+  <label>Date to <input type="date" id="dateTo" /></label>
+  <label>Search <input type="text" id="search" placeholder="query, response, intent, session…" /></label>
   <label>Limit
     <select id="limit">
       <option value="50">50</option>
@@ -185,52 +226,126 @@
       <option value="2000">2000</option>
     </select>
   </label>
+  <span class="view-toggle">
+    <button id="vbubble" class="active">Chat bubbles</button>
+    <button id="vtable">Compact table</button>
+  </span>
   <button id="refresh">Refresh now</button>
   <label><input type="checkbox" id="autoRefresh" checked /> Auto</label>
 </div>
 
-<table id="logTable">
-  <thead>
-    <tr>
-      <th style="width:140px">Time</th>
-      <th style="width:90px">Sport</th>
-      <th style="width:120px">Intent</th>
-      <th>User query</th>
-      <th>AI response</th>
-    </tr>
-  </thead>
-  <tbody id="logBody"></tbody>
-</table>
-
+<div id="content" class="conversations"></div>
 <div id="empty" class="empty" style="display:none;">
-  No conversations logged yet. Once a customer chats with one of the bots, rows will appear here within seconds.
+  No conversations match your filters yet. Once a customer chats with one of the bots, rows appear here within seconds.
   <br /><br />
-  Quick test: <code>curl https://&lt;this-host&gt;/debug/test?sport=tennis</code>
+  Quick test: <code>curl https://to-assistant-logs.onrender.com/debug/test?sport=tennis</code>
 </div>
 
 <footer>
-  TO Assistant Logs · in-memory (last <span id="ft-max">5000</span>) ·
-  <a href="/api/health">/api/health</a> ·
-  <a href="/api/logs">/api/logs</a> ·
+  TO Assistant Logs · in-memory ring buffer (last <span id="ft-max">5000</span>) ·
+  <a href="/api/health">/api/health</a>
+  <a href="/api/logs">/api/logs</a>
   <a href="/debug/test">/debug/test</a>
+  · Zoho webhook: <code>POST /zoho</code>
 </footer>
 
 <script>
-const sportSel = document.getElementById('sport');
-const searchInp = document.getElementById('search');
-const limitSel = document.getElementById('limit');
-const refreshBtn = document.getElementById('refresh');
-const autoRefresh = document.getElementById('autoRefresh');
-const tbody = document.getElementById('logBody');
-const empty = document.getElementById('empty');
+const $ = id => document.getElementById(id);
+const sportSel = $('sport'), sourceSel = $('source'), searchInp = $('search'), limitSel = $('limit');
+const dateFrom = $('dateFrom'), dateTo = $('dateTo');
+const refreshBtn = $('refresh'), autoRefresh = $('autoRefresh');
+const content = $('content'), empty = $('empty');
+const vbubble = $('vbubble'), vtable = $('vtable');
+let viewMode = 'bubble';
 
+function fmtDate(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+}
 function fmtTime(iso) {
   const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) +
-         ' · ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function classifyByDate(iso) {
+  if (!dateFrom.value && !dateTo.value) return true;
+  const t = new Date(iso).getTime();
+  if (dateFrom.value) {
+    const f = new Date(dateFrom.value + 'T00:00:00').getTime();
+    if (t < f) return false;
+  }
+  if (dateTo.value) {
+    const tt = new Date(dateTo.value + 'T23:59:59').getTime();
+    if (t > tt) return false;
+  }
+  return true;
+}
+
+function renderBubbles(logs) {
+  return logs.map(l => {
+    const sport = (l.sport || 'unknown');
+    const source = (l.source || 'bot');
+    const agentLabel = source === 'human' ? (l.agent_name ? `Human · ${esc(l.agent_name)}` : 'Human agent') : 'AI bot';
+    const responseClass = source === 'human' ? 'human' : 'bot';
+    const showUser = (l.user_query || '').trim();
+    const showResp = (l.ai_response || '').trim();
+    return `
+      <div class="convo">
+        <div class="convo-meta">
+          <span class="pill ${esc(sport)}">${esc(sport)}</span>
+          <span class="pill ${esc(source === 'human' ? 'human' : 'bot')}">${esc(source === 'human' ? 'Human' : 'AI bot')}</span>
+          <span class="date">${esc(fmtDate(l.timestamp))}</span>
+          <span class="time">· ${esc(fmtTime(l.timestamp))}</span>
+          ${l.intent ? `<span class="intent">intent: ${esc(l.intent)}</span>` : ''}
+          ${l.endpoint ? `<span class="endpoint">${esc(l.endpoint)}</span>` : ''}
+          ${l.session_id ? `<span class="session">session: ${esc(l.session_id.slice(0, 16))}</span>` : ''}
+          ${source === 'human' && l.agent_name ? `<span class="agent-name">${esc(l.agent_name)}</span>` : ''}
+        </div>
+        ${showUser ? `
+          <div class="bubble-row right">
+            <div>
+              <div class="bubble-label" style="text-align:right;">Customer</div>
+              <div class="bubble user">${esc(showUser)}</div>
+            </div>
+          </div>` : ''}
+        ${showResp ? `
+          <div class="bubble-row">
+            <div>
+              <div class="bubble-label">${esc(agentLabel)}</div>
+              <div class="bubble ${responseClass}">${esc(showResp)}</div>
+            </div>
+          </div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderTable(logs) {
+  const head = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr>
+      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:110px;">Date</th>
+      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:90px;">Time</th>
+      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:80px;">Sport</th>
+      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:80px;">Source</th>
+      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);">Customer</th>
+      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);">Reply</th>
+    </tr></thead><tbody>`;
+  const rows = logs.map(l => {
+    const source = l.source || 'bot';
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:10px 8px;vertical-align:top;color:var(--text);font-variant-numeric:tabular-nums;font-size:12px;">${esc(fmtDate(l.timestamp))}</td>
+      <td style="padding:10px 8px;vertical-align:top;color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px;">${esc(fmtTime(l.timestamp))}</td>
+      <td style="padding:10px 8px;vertical-align:top;"><span class="pill ${esc(l.sport||'unknown')}">${esc(l.sport||'unknown')}</span></td>
+      <td style="padding:10px 8px;vertical-align:top;"><span class="pill ${esc(source==='human'?'human':'bot')}">${esc(source==='human'?'Human':'AI')}</span></td>
+      <td style="padding:10px 8px;vertical-align:top;max-width:340px;white-space:pre-wrap;word-wrap:break-word;">${esc((l.user_query||'').slice(0, 280))}</td>
+      <td style="padding:10px 8px;vertical-align:top;color:var(--muted);max-width:420px;white-space:pre-wrap;word-wrap:break-word;">${esc((l.ai_response||'').slice(0, 420))}</td>
+    </tr>`;
+  }).join('');
+  return head + rows + `</tbody></table>`;
 }
 
 async function load() {
@@ -238,53 +353,37 @@ async function load() {
   if (sportSel.value) params.set('sport', sportSel.value);
   if (searchInp.value.trim()) params.set('q', searchInp.value.trim());
   params.set('limit', limitSel.value);
-
   try {
     const r = await fetch('/api/logs?' + params.toString());
     const d = await r.json();
-    document.getElementById('stat-total').textContent = d.total_received.toLocaleString();
-    document.getElementById('stat-buffer').textContent = d.total_in_buffer.toLocaleString();
-
-    if (!d.logs.length) {
-      tbody.innerHTML = '';
-      empty.style.display = '';
-      return;
+    $('stat-total').textContent = d.total_received.toLocaleString();
+    $('stat-buffer').textContent = d.total_in_buffer.toLocaleString();
+    let logs = d.logs;
+    if (sourceSel.value) logs = logs.filter(l => (l.source || 'bot') === sourceSel.value);
+    logs = logs.filter(l => classifyByDate(l.timestamp));
+    if (!logs.length) {
+      content.innerHTML = ''; empty.style.display = ''; return;
     }
     empty.style.display = 'none';
-    tbody.innerHTML = d.logs.map(l => `
-      <tr>
-        <td class="time">${esc(fmtTime(l.timestamp))}</td>
-        <td><span class="pill ${esc(l.sport)}">${esc(l.sport)}</span></td>
-        <td class="intent">${esc(l.intent || '—')}</td>
-        <td class="query"><div class="truncate" onclick="this.classList.toggle('expanded')">${esc(l.user_query)}</div></td>
-        <td class="response"><div class="truncate" onclick="this.classList.toggle('expanded')">${esc(l.ai_response)}</div></td>
-      </tr>
-    `).join('');
+    content.innerHTML = viewMode === 'bubble' ? renderBubbles(logs) : renderTable(logs);
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" style="color:#ff6b6b;padding:20px;">Failed to load logs: ${esc(err.message)}</td></tr>`;
+    content.innerHTML = `<div class="empty" style="color:#ff6b6b;">Failed to load logs: ${esc(err.message)}</div>`;
   }
 }
 
 let timer = null;
-function startTimer() {
-  stopTimer();
-  if (autoRefresh.checked) timer = setInterval(load, 5000);
-}
+function startTimer() { stopTimer(); if (autoRefresh.checked) timer = setInterval(load, 5000); }
 function stopTimer() { if (timer) clearInterval(timer); timer = null; }
 
 refreshBtn.addEventListener('click', load);
 autoRefresh.addEventListener('change', () => autoRefresh.checked ? startTimer() : stopTimer());
-sportSel.addEventListener('change', load);
-limitSel.addEventListener('change', load);
+[sportSel, sourceSel, limitSel, dateFrom, dateTo].forEach(el => el.addEventListener('change', load));
 let searchT = null;
-searchInp.addEventListener('input', () => {
-  clearTimeout(searchT);
-  searchT = setTimeout(load, 300);
-});
+searchInp.addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(load, 300); });
+vbubble.addEventListener('click', () => { viewMode = 'bubble'; vbubble.classList.add('active'); vtable.classList.remove('active'); load(); });
+vtable.addEventListener('click', () => { viewMode = 'table'; vtable.classList.add('active'); vbubble.classList.remove('active'); load(); });
 
-fetch('/api/health').then(r => r.json()).then(d => {
-  document.getElementById('ft-max').textContent = (d.max_entries || 5000).toLocaleString();
-});
+fetch('/api/health').then(r => r.json()).then(d => { $('ft-max').textContent = (d.max_entries || 5000).toLocaleString(); });
 
 load();
 startTimer();

@@ -47,7 +47,58 @@ app.post('/log', (req, res) => {
       ai_response: String(b.ai_response || '').slice(0, 8000),
       intent: String(b.intent || ''),
       endpoint: String(b.endpoint || ''),
+      source: String(b.source || 'bot'),  // 'bot' = AI, 'human' = live agent (Zoho)
+      agent_name: String(b.agent_name || ''),
       meta: String(b.meta || '')
+    };
+    pushLog(entry);
+    res.json({ ok: true, id: entry.id });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: String(err.message || err) });
+  }
+});
+
+// Zoho SalesIQ webhook receiver — accepts whatever Zoho's webhook posts and
+// flattens the relevant fields into our log shape with source='human'.
+// Setup: in Zoho SalesIQ → Settings → Developers → Webhooks → add a webhook
+// pointing at https://to-assistant-logs.onrender.com/zoho with the events:
+// chat.message, chat.completed (or "all chat events").
+//
+// Zoho sends slightly different payload shapes per event/version, so the
+// extraction below is permissive — falls back to storing the raw JSON in
+// `meta` if we can't recognize the shape.
+app.post('/zoho', (req, res) => {
+  try {
+    const b = req.body || {};
+    // Try several known shapes
+    const visitor = b.visitor || b.chat_visitor || b.user || {};
+    const operator = b.operator || b.agent || b.assigned_to || {};
+    const message = b.message || b.last_message || b.chat_text || '';
+    const messageBody = (typeof message === 'string') ? message : (message.text || message.content || '');
+    const sport = String(b.sport || b.department || b.brand || 'unknown').toLowerCase();
+    const sessionId = String(b.chat_id || b.visitor_id || b.session_id || visitor.id || '');
+
+    // Determine if this message is FROM the visitor or FROM the human agent
+    const senderType = String(b.sender_type || b.from || b.source || '').toLowerCase();
+    const fromHuman = /operator|agent|attender|staff/.test(senderType);
+    const fromVisitor = /visitor|customer|user/.test(senderType);
+
+    const userText = fromVisitor ? messageBody : (b.visitor_message || visitor.message || '');
+    const agentText = fromHuman ? messageBody : (b.operator_message || operator.message || '');
+
+    const entry = {
+      id: totalReceived + 1,
+      received_at: new Date().toISOString(),
+      timestamp: String(b.timestamp || b.event_time || b.created_at || new Date().toISOString()),
+      sport,
+      session_id: sessionId,
+      user_query: String(userText || '').slice(0, 4000),
+      ai_response: String(agentText || '').slice(0, 8000),  // for human responses
+      intent: String(b.event || b.event_type || 'zoho_chat'),
+      endpoint: '/zoho',
+      source: 'human',
+      agent_name: String(operator.name || operator.email || b.operator_name || ''),
+      meta: JSON.stringify(b).slice(0, 4000)
     };
     pushLog(entry);
     res.json({ ok: true, id: entry.id });
