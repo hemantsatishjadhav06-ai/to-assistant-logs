@@ -10,6 +10,7 @@
     --panel: #1a2129;
     --panel-2: #232c38;
     --border: #2a3440;
+    --border-strong: #3a4654;
     --text: #e6edf3;
     --muted: #8b949e;
     --accent: #58a6ff;
@@ -51,6 +52,7 @@
     gap: 12px;
     align-items: center;
     flex-wrap: wrap;
+    position: sticky; top: 51px; z-index: 9;
   }
   .controls select, .controls input[type=text], .controls input[type=date] {
     background: var(--bg);
@@ -61,7 +63,7 @@
     font-size: 13px;
     font-family: inherit;
   }
-  .controls input[type=text] { min-width: 280px; }
+  .controls input[type=text] { min-width: 260px; }
   .controls input[type=date] { color-scheme: dark; }
   .controls label { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
   .controls button {
@@ -91,36 +93,102 @@
   .pill.bot { background: rgba(88, 166, 255, 0.15); color: var(--bot); border: 1px solid rgba(88, 166, 255, 0.4); }
   .pill.human { background: rgba(163, 113, 247, 0.15); color: var(--human); border: 1px solid rgba(163, 113, 247, 0.4); }
 
-  .conversations { padding: 16px 24px; display: flex; flex-direction: column; gap: 12px; }
-  .convo {
+  .container { padding: 16px 24px 60px; }
+  .section-title {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 16px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-weight: 600;
+  }
+
+  /* ===== Customer cards (grouped view) ===== */
+  .customer-card {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
+    border-radius: 12px;
+    margin-bottom: 14px;
+    overflow: hidden;
   }
-  .convo-meta {
+  .customer-card.has-human { border-color: rgba(163, 113, 247, 0.4); }
+  .customer-card.has-handoff { border-left: 3px solid var(--human); }
+  .customer-header {
+    background: var(--panel-2);
+    padding: 12px 16px;
     display: flex;
     align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .customer-header:hover { background: #2a3340; }
+  .customer-header .chevron {
+    width: 14px;
+    color: var(--muted);
+    font-size: 11px;
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+  .customer-card.collapsed .chevron { transform: rotate(-90deg); }
+  .customer-card.collapsed .customer-body { display: none; }
+  .customer-id {
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .customer-meta {
+    color: var(--muted);
+    font-size: 12px;
+    display: flex;
     gap: 10px;
     flex-wrap: wrap;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px dashed var(--border);
-    font-size: 12px;
-    color: var(--muted);
+    align-items: center;
+    margin-left: auto;
   }
-  .convo-meta .date { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
-  .convo-meta .time { font-variant-numeric: tabular-nums; }
-  .convo-meta .session { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
-  .convo-meta .intent { color: var(--accent); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
-  .convo-meta .endpoint { color: var(--muted); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; }
-  .convo-meta .agent-name { color: var(--human); font-weight: 500; }
+  .customer-meta .sep { color: var(--border-strong); }
+  .turn-count {
+    background: var(--bg);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 500;
+  }
 
-  .bubble-row { display: flex; gap: 10px; margin-bottom: 8px; }
+  .customer-body {
+    padding: 14px 16px;
+    background: var(--panel);
+  }
+  .turn {
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .turn:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+
+  .turn-meta {
+    color: var(--muted);
+    font-size: 11px;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .turn-meta .time { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 500; }
+  .turn-meta .intent { color: var(--accent); font-family: ui-monospace, monospace; }
+  .turn-meta .endpoint { color: var(--muted); font-family: ui-monospace, monospace; font-size: 10px; }
+
+  .bubble-row { display: flex; gap: 10px; margin-bottom: 6px; }
   .bubble-row.right { justify-content: flex-end; }
   .bubble {
-    max-width: min(720px, 78%);
-    padding: 10px 14px;
+    max-width: min(720px, 82%);
+    padding: 9px 13px;
     border-radius: 14px;
     line-height: 1.45;
     white-space: pre-wrap;
@@ -150,6 +218,8 @@
     margin-bottom: 4px;
     font-weight: 600;
   }
+  .bubble-row.right .bubble-label { text-align: right; }
+
   .empty {
     padding: 80px 24px;
     text-align: center;
@@ -186,6 +256,17 @@
     border-radius: 6px;
   }
   .view-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .actions { margin-left: auto; display: flex; gap: 8px; }
+  .actions button {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .actions button:hover { color: var(--text); border-color: var(--border-strong); }
 </style>
 </head>
 <body>
@@ -193,8 +274,8 @@
   <h1>TO Assistant — Conversation Logs</h1>
   <div class="stats">
     <span class="live-dot"></span>
-    <strong id="stat-total">0</strong> received ·
-    <strong id="stat-buffer">0</strong> in buffer ·
+    <strong id="stat-customers">0</strong> customers ·
+    <strong id="stat-total">0</strong> messages received ·
     auto-refresh every <strong>5s</strong>
   </div>
 </header>
@@ -208,35 +289,32 @@
       <option value="pickleball">Pickleball</option>
     </select>
   </label>
-  <label>Source
+  <label>Type
     <select id="source">
-      <option value="">All</option>
+      <option value="">All conversations</option>
       <option value="bot">AI bot only</option>
-      <option value="human">Human agent only (Zoho)</option>
+      <option value="human">Has human handoff</option>
     </select>
   </label>
   <label>Date from <input type="date" id="dateFrom" /></label>
   <label>Date to <input type="date" id="dateTo" /></label>
-  <label>Search <input type="text" id="search" placeholder="query, response, intent, session…" /></label>
-  <label>Limit
-    <select id="limit">
-      <option value="50">50</option>
-      <option value="200" selected>200</option>
-      <option value="500">500</option>
-      <option value="2000">2000</option>
-    </select>
-  </label>
+  <label>Search <input type="text" id="search" placeholder="query, response, intent…" /></label>
   <span class="view-toggle">
-    <button id="vbubble" class="active">Chat bubbles</button>
-    <button id="vtable">Compact table</button>
+    <button id="vCustomer" class="active">By customer</button>
+    <button id="vFlat">All messages</button>
+    <button id="vTable">Table</button>
   </span>
-  <button id="refresh">Refresh now</button>
-  <label><input type="checkbox" id="autoRefresh" checked /> Auto</label>
+  <div class="actions">
+    <button id="expandAll">Expand all</button>
+    <button id="collapseAll">Collapse all</button>
+    <button id="refresh">Refresh</button>
+    <label><input type="checkbox" id="autoRefresh" checked /> Auto</label>
+  </div>
 </div>
 
-<div id="content" class="conversations"></div>
+<div id="content" class="container"></div>
 <div id="empty" class="empty" style="display:none;">
-  No conversations match your filters yet. Once a customer chats with one of the bots, rows appear here within seconds.
+  No conversations match your filters yet. Once a customer chats with one of the bots, customer cards appear here within seconds.
   <br /><br />
   Quick test: <code>curl https://to-assistant-logs.onrender.com/debug/test?sport=tennis</code>
 </div>
@@ -251,12 +329,14 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const sportSel = $('sport'), sourceSel = $('source'), searchInp = $('search'), limitSel = $('limit');
+const sportSel = $('sport'), sourceSel = $('source'), searchInp = $('search');
 const dateFrom = $('dateFrom'), dateTo = $('dateTo');
 const refreshBtn = $('refresh'), autoRefresh = $('autoRefresh');
 const content = $('content'), empty = $('empty');
-const vbubble = $('vbubble'), vtable = $('vtable');
-let viewMode = 'bubble';
+const vCustomer = $('vCustomer'), vFlat = $('vFlat'), vTable = $('vTable');
+const expandAll = $('expandAll'), collapseAll = $('collapseAll');
+let viewMode = 'customer';
+let collapsedSessions = new Set();
 
 function fmtDate(iso) {
   const d = new Date(iso);
@@ -268,10 +348,19 @@ function fmtTime(iso) {
   if (isNaN(d.getTime())) return '';
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
+function fmtRelative(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-function classifyByDate(iso) {
+function inDateRange(iso) {
   if (!dateFrom.value && !dateTo.value) return true;
   const t = new Date(iso).getTime();
   if (dateFrom.value) {
@@ -285,87 +374,201 @@ function classifyByDate(iso) {
   return true;
 }
 
-function renderBubbles(logs) {
-  return logs.map(l => {
-    const sport = (l.sport || 'unknown');
-    const source = (l.source || 'bot');
-    const agentLabel = source === 'human' ? (l.agent_name ? `Human · ${esc(l.agent_name)}` : 'Human agent') : 'AI bot';
-    const responseClass = source === 'human' ? 'human' : 'bot';
-    const showUser = (l.user_query || '').trim();
-    const showResp = (l.ai_response || '').trim();
+// Group flat log array by session_id (or fall back to a synthetic key).
+// Returns array of { sessionId, sport, hasHuman, hasHandoff, firstAt, lastAt, turns: [...] }
+function groupBySession(logs) {
+  const groups = new Map();
+  for (const l of logs) {
+    let key = (l.session_id || '').trim();
+    if (!key) key = `_orphan_${l.id}`;  // each orphan becomes its own "customer" so they don't pile up
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        sessionId: key,
+        displayId: key.startsWith('_orphan_') ? '(no session)' : key,
+        sports: new Set(),
+        hasHuman: false,
+        hasHandoff: false,
+        firstAt: l.timestamp,
+        lastAt: l.timestamp,
+        turns: []
+      };
+      groups.set(key, g);
+    }
+    g.sports.add(l.sport || 'unknown');
+    if (l.source === 'human') g.hasHuman = true;
+    if ((l.intent || '').includes('handoff') || (l.ai_response || '').includes('OPEN_HUMAN_CHAT')) g.hasHandoff = true;
+    if (new Date(l.timestamp) < new Date(g.firstAt)) g.firstAt = l.timestamp;
+    if (new Date(l.timestamp) > new Date(g.lastAt)) g.lastAt = l.timestamp;
+    g.turns.push(l);
+  }
+  // Sort turns within each group oldest → newest (natural reading order)
+  for (const g of groups.values()) {
+    g.turns.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    g.primarySport = [...g.sports][0] || 'unknown';
+  }
+  // Customers ordered by most-recent activity
+  return [...groups.values()].sort((a, b) => new Date(b.lastAt) - new Date(a.lastAt));
+}
+
+function renderTurn(l, isFirstHumanTurn) {
+  const source = l.source || 'bot';
+  const showUser = (l.user_query || '').trim();
+  const showResp = (l.ai_response || '').trim();
+  const respLabel = source === 'human'
+    ? (l.agent_name ? `Human · ${esc(l.agent_name)}` : 'Human agent')
+    : 'AI bot';
+  const respClass = source === 'human' ? 'human' : 'bot';
+  const handoffBadge = (l.intent || '').includes('handoff') || (l.ai_response || '').includes('OPEN_HUMAN_CHAT')
+    ? '<span class="pill human" style="margin-left:6px;">→ Handoff</span>' : '';
+  return `
+    <div class="turn">
+      <div class="turn-meta">
+        <span class="time">${esc(fmtTime(l.timestamp))}</span>
+        <span>${esc(fmtDate(l.timestamp))}</span>
+        ${l.intent ? `<span class="intent">· ${esc(l.intent)}</span>` : ''}
+        ${l.endpoint ? `<span class="endpoint">· ${esc(l.endpoint)}</span>` : ''}
+        ${handoffBadge}
+        ${isFirstHumanTurn ? '<span class="pill human" style="margin-left:6px;">⮕ Live agent picked up</span>' : ''}
+      </div>
+      ${showUser ? `
+        <div class="bubble-row right">
+          <div>
+            <div class="bubble-label">Customer</div>
+            <div class="bubble user">${esc(showUser)}</div>
+          </div>
+        </div>` : ''}
+      ${showResp ? `
+        <div class="bubble-row">
+          <div>
+            <div class="bubble-label">${respLabel}</div>
+            <div class="bubble ${respClass}">${esc(showResp)}</div>
+          </div>
+        </div>` : ''}
+    </div>
+  `;
+}
+
+function renderByCustomer(logs) {
+  const groups = groupBySession(logs);
+  if (!groups.length) return '';
+  const html = groups.map(g => {
+    const isCollapsed = collapsedSessions.has(g.sessionId);
+    let sawHumanFirst = false;
+    const turnsHtml = g.turns.map(t => {
+      const firstHuman = !sawHumanFirst && t.source === 'human';
+      if (firstHuman) sawHumanFirst = true;
+      return renderTurn(t, firstHuman);
+    }).join('');
+    const sportPills = [...g.sports].map(s => `<span class="pill ${esc(s)}">${esc(s)}</span>`).join(' ');
+    const sourcePills = (g.hasHuman ? '<span class="pill human">Human handoff</span>' : '<span class="pill bot">AI only</span>');
     return `
-      <div class="convo">
-        <div class="convo-meta">
-          <span class="pill ${esc(sport)}">${esc(sport)}</span>
-          <span class="pill ${esc(source === 'human' ? 'human' : 'bot')}">${esc(source === 'human' ? 'Human' : 'AI bot')}</span>
-          <span class="date">${esc(fmtDate(l.timestamp))}</span>
-          <span class="time">· ${esc(fmtTime(l.timestamp))}</span>
-          ${l.intent ? `<span class="intent">intent: ${esc(l.intent)}</span>` : ''}
-          ${l.endpoint ? `<span class="endpoint">${esc(l.endpoint)}</span>` : ''}
-          ${l.session_id ? `<span class="session">session: ${esc(l.session_id.slice(0, 16))}</span>` : ''}
-          ${source === 'human' && l.agent_name ? `<span class="agent-name">${esc(l.agent_name)}</span>` : ''}
+      <div class="customer-card ${isCollapsed ? 'collapsed' : ''} ${g.hasHandoff ? 'has-handoff' : ''} ${g.hasHuman ? 'has-human' : ''}" data-session="${esc(g.sessionId)}">
+        <div class="customer-header" onclick="toggleSession('${esc(g.sessionId)}')">
+          <span class="chevron">▼</span>
+          ${sportPills}
+          ${sourcePills}
+          <span class="customer-id">${esc(g.displayId.slice(0, 32))}${g.displayId.length > 32 ? '…' : ''}</span>
+          <span class="customer-meta">
+            <span class="turn-count">${g.turns.length} message${g.turns.length === 1 ? '' : 's'}</span>
+            <span class="sep">·</span>
+            <span>started ${esc(fmtDate(g.firstAt))} ${esc(fmtTime(g.firstAt))}</span>
+            <span class="sep">·</span>
+            <span>last ${esc(fmtRelative(g.lastAt))}</span>
+          </span>
         </div>
-        ${showUser ? `
-          <div class="bubble-row right">
-            <div>
-              <div class="bubble-label" style="text-align:right;">Customer</div>
-              <div class="bubble user">${esc(showUser)}</div>
-            </div>
-          </div>` : ''}
-        ${showResp ? `
-          <div class="bubble-row">
-            <div>
-              <div class="bubble-label">${esc(agentLabel)}</div>
-              <div class="bubble ${responseClass}">${esc(showResp)}</div>
-            </div>
-          </div>` : ''}
+        <div class="customer-body">${turnsHtml}</div>
       </div>
     `;
   }).join('');
+  return `<div class="section-title">${groups.length} customer${groups.length === 1 ? '' : 's'} (most recent first)</div>${html}`;
+}
+
+function renderFlat(logs) {
+  // newest first across all conversations
+  const sorted = [...logs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  if (!sorted.length) return '';
+  return `<div class="section-title">${sorted.length} message${sorted.length === 1 ? '' : 's'} (newest first)</div>` +
+    sorted.map(l => `
+      <div class="customer-card">
+        <div class="customer-body">
+          ${renderTurn(l, false)}
+          <div class="turn-meta" style="margin-top:6px;">
+            <span class="pill ${esc(l.sport || 'unknown')}">${esc(l.sport || 'unknown')}</span>
+            <span class="pill ${l.source === 'human' ? 'human' : 'bot'}">${l.source === 'human' ? 'Human' : 'AI'}</span>
+            ${l.session_id ? `<span class="endpoint">· session: ${esc(l.session_id.slice(0, 24))}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `).join('');
 }
 
 function renderTable(logs) {
-  const head = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+  const sorted = [...logs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const head = `<table style="width:100%;border-collapse:collapse;font-size:13px;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
     <thead><tr>
       <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:110px;">Date</th>
       <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:90px;">Time</th>
       <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:80px;">Sport</th>
       <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:80px;">Source</th>
-      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);">Customer</th>
+      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:140px;">Customer</th>
+      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);">Query</th>
       <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);">Reply</th>
     </tr></thead><tbody>`;
-  const rows = logs.map(l => {
+  const rows = sorted.map(l => {
     const source = l.source || 'bot';
     return `<tr style="border-bottom:1px solid var(--border);">
       <td style="padding:10px 8px;vertical-align:top;color:var(--text);font-variant-numeric:tabular-nums;font-size:12px;">${esc(fmtDate(l.timestamp))}</td>
       <td style="padding:10px 8px;vertical-align:top;color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px;">${esc(fmtTime(l.timestamp))}</td>
       <td style="padding:10px 8px;vertical-align:top;"><span class="pill ${esc(l.sport||'unknown')}">${esc(l.sport||'unknown')}</span></td>
       <td style="padding:10px 8px;vertical-align:top;"><span class="pill ${esc(source==='human'?'human':'bot')}">${esc(source==='human'?'Human':'AI')}</span></td>
-      <td style="padding:10px 8px;vertical-align:top;max-width:340px;white-space:pre-wrap;word-wrap:break-word;">${esc((l.user_query||'').slice(0, 280))}</td>
-      <td style="padding:10px 8px;vertical-align:top;color:var(--muted);max-width:420px;white-space:pre-wrap;word-wrap:break-word;">${esc((l.ai_response||'').slice(0, 420))}</td>
+      <td style="padding:10px 8px;vertical-align:top;font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);">${esc((l.session_id||'').slice(0, 16))}</td>
+      <td style="padding:10px 8px;vertical-align:top;max-width:300px;white-space:pre-wrap;word-wrap:break-word;">${esc((l.user_query||'').slice(0, 240))}</td>
+      <td style="padding:10px 8px;vertical-align:top;color:var(--muted);max-width:380px;white-space:pre-wrap;word-wrap:break-word;">${esc((l.ai_response||'').slice(0, 400))}</td>
     </tr>`;
   }).join('');
   return head + rows + `</tbody></table>`;
 }
 
+function toggleSession(sessionId) {
+  if (collapsedSessions.has(sessionId)) collapsedSessions.delete(sessionId);
+  else collapsedSessions.add(sessionId);
+  load();
+}
+window.toggleSession = toggleSession;
+
 async function load() {
   const params = new URLSearchParams();
   if (sportSel.value) params.set('sport', sportSel.value);
   if (searchInp.value.trim()) params.set('q', searchInp.value.trim());
-  params.set('limit', limitSel.value);
+  params.set('limit', 2000);
   try {
     const r = await fetch('/api/logs?' + params.toString());
     const d = await r.json();
-    $('stat-total').textContent = d.total_received.toLocaleString();
-    $('stat-buffer').textContent = d.total_in_buffer.toLocaleString();
     let logs = d.logs;
-    if (sourceSel.value) logs = logs.filter(l => (l.source || 'bot') === sourceSel.value);
-    logs = logs.filter(l => classifyByDate(l.timestamp));
+    // Apply client-side filters
+    if (sourceSel.value === 'bot') logs = logs.filter(l => (l.source || 'bot') === 'bot');
+    if (sourceSel.value === 'human') {
+      // "Has human handoff" — show all turns of any session where ANY turn was human
+      const humanSessions = new Set(logs.filter(l => l.source === 'human').map(l => l.session_id || ''));
+      logs = logs.filter(l => humanSessions.has(l.session_id || ''));
+    }
+    logs = logs.filter(l => inDateRange(l.timestamp));
+
+    // Update header stats
+    $('stat-total').textContent = d.total_received.toLocaleString();
+    const customerCount = new Set(logs.map(l => l.session_id || `_o_${l.id}`)).size;
+    $('stat-customers').textContent = customerCount.toLocaleString();
+
     if (!logs.length) {
-      content.innerHTML = ''; empty.style.display = ''; return;
+      content.innerHTML = '';
+      empty.style.display = '';
+      return;
     }
     empty.style.display = 'none';
-    content.innerHTML = viewMode === 'bubble' ? renderBubbles(logs) : renderTable(logs);
+    if (viewMode === 'customer') content.innerHTML = renderByCustomer(logs);
+    else if (viewMode === 'flat') content.innerHTML = renderFlat(logs);
+    else content.innerHTML = renderTable(logs);
   } catch (err) {
     content.innerHTML = `<div class="empty" style="color:#ff6b6b;">Failed to load logs: ${esc(err.message)}</div>`;
   }
@@ -377,11 +580,19 @@ function stopTimer() { if (timer) clearInterval(timer); timer = null; }
 
 refreshBtn.addEventListener('click', load);
 autoRefresh.addEventListener('change', () => autoRefresh.checked ? startTimer() : stopTimer());
-[sportSel, sourceSel, limitSel, dateFrom, dateTo].forEach(el => el.addEventListener('change', load));
+[sportSel, sourceSel, dateFrom, dateTo].forEach(el => el.addEventListener('change', load));
 let searchT = null;
 searchInp.addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(load, 300); });
-vbubble.addEventListener('click', () => { viewMode = 'bubble'; vbubble.classList.add('active'); vtable.classList.remove('active'); load(); });
-vtable.addEventListener('click', () => { viewMode = 'table'; vtable.classList.add('active'); vbubble.classList.remove('active'); load(); });
+
+vCustomer.addEventListener('click', () => { viewMode = 'customer'; vCustomer.classList.add('active'); vFlat.classList.remove('active'); vTable.classList.remove('active'); load(); });
+vFlat.addEventListener('click', () => { viewMode = 'flat'; vFlat.classList.add('active'); vCustomer.classList.remove('active'); vTable.classList.remove('active'); load(); });
+vTable.addEventListener('click', () => { viewMode = 'table'; vTable.classList.add('active'); vCustomer.classList.remove('active'); vFlat.classList.remove('active'); load(); });
+
+expandAll.addEventListener('click', () => { collapsedSessions.clear(); load(); });
+collapseAll.addEventListener('click', () => {
+  document.querySelectorAll('.customer-card[data-session]').forEach(el => collapsedSessions.add(el.dataset.session));
+  load();
+});
 
 fetch('/api/health').then(r => r.json()).then(d => { $('ft-max').textContent = (d.max_entries || 5000).toLocaleString(); });
 
