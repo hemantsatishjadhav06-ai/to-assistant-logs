@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TO Assistant — Sign in</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2129;
+    --border: #2a3440;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --error: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px 28px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+  h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 28px;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    margin-top: 16px;
+    font-weight: 600;
+  }
+  input {
+    width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  button {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 11px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 20px;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.9; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .error {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: rgba(248, 81, 73, 0.15);
+    border: 1px solid rgba(248, 81, 73, 0.4);
+    color: var(--error);
+    border-radius: 8px;
+    font-size: 13px;
+    display: none;
+  }
+  .error.show { display: block; }
+  footer {
+    margin-top: 24px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .lock {
+    width: 32px; height: 32px; margin-bottom: 14px; opacity: 0.6;
+  }
+</style>
+</head>
+<body>
+<form class="card" id="loginForm" autocomplete="on">
+  <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+  <h1>TO Assistant — Agent console</h1>
+  <div class="subtitle">Sign in to view conversations and reply to customers.</div>
+
+  <label for="agent_name">Your name</label>
+  <input type="text" id="agent_name" name="agent_name" required autocomplete="username" placeholder="e.g. Priya" />
+
+  <label for="password">Shared agent password</label>
+  <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••" />
+
+  <button type="submit" id="submitBtn">Sign in</button>
+  <div class="error" id="error"></div>
+
+  <footer>Sessions expire after 24 hours.</footer>
+</form>
+<script>
+const form = document.getElementById('loginForm');
+const btn = document.getElementById('submitBtn');
+const errEl = document.getElementById('error');
+function showError(msg) {
+  errEl.textContent = msg;
+  errEl.classList.add('show');
+}
+function hideError() { errEl.classList.remove('show'); errEl.textContent = ''; }
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  hideError();
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        agent_name: document.getElementById('agent_name').value.trim(),
+        password: document.getElementById('password').value
+      })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) {
+      window.location.href = '/';
+      return;
+    }
+    if (r.status === 429) showError('Too many attempts. Please wait a minute and try again.');
+    else if (r.status === 401) showError('Wrong password. Try again.');
+    else if (r.status === 400) showError('Please enter both your name and the password.');
+    else if (r.status === 500) showError('Login is not configured on the server. Contact your admin.');
+    else showError('Something went wrong. Please try again.');
+  } catch (err) {
+    showError('Network error: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign in';
+  }
+});
+// If already logged in, bounce to dashboard
+fetch('/api/me', { credentials: 'same-origin' }).then(r => {
+  if (r.ok) window.location.href = '/';
+}).catch(() => {});
+</script>
+</body>
+</html>

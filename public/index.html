@@ -415,6 +415,10 @@
       <span class="toggle-label" data-state>ON</span>
     </label>
   </div>
+  <div class="agent-info" id="agent-info" style="margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;">
+    <span>Signed in as <strong id="agent-name" style="color:var(--text);">…</strong></span>
+    <button id="logout-btn" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;">Logout</button>
+  </div>
 </header>
 <audio id="notif-sound" preload="auto" src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YT9vT18AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="></audio>
 
@@ -854,7 +858,7 @@ async function sendHumanReply(sessionId, sport) {
       body: JSON.stringify({
         session_id: sessionId,
         text,
-        agent_name: localStorage.getItem('agent_name') || 'Support',
+        // agent_name comes from server session (auth'd) — body field ignored, prevents impersonation
         sport
       })
     });
@@ -965,7 +969,36 @@ collapseAll.addEventListener('click', () => {
 
 fetch('/api/health').then(r => r.json()).then(d => { $('ft-max').textContent = (d.max_entries || 5000).toLocaleString(); });
 
+// ===== AUTH: bootstrap agent info + global 401 handler =====
+const _origFetch2 = window.fetch;
+window.fetch = function(input, init) {
+  const opts = init || {};
+  if (!('credentials' in opts)) opts.credentials = 'same-origin';
+  return _origFetch2(input, opts).then(resp => {
+    // If any dashboard call returns 401, the session expired — redirect to login.
+    if (resp.status === 401 && typeof input === 'string' && input.startsWith('/api/') && !input.startsWith('/api/login')) {
+      window.location.href = '/login';
+    }
+    return resp;
+  });
+};
+
+async function bootstrapAuth() {
+  try {
+    const r = await fetch('/api/me');
+    if (!r.ok) { window.location.href = '/login'; return; }
+    const d = await r.json();
+    const el = document.getElementById('agent-name');
+    if (el) el.textContent = d.agent_name || 'Agent';
+  } catch (e) { window.location.href = '/login'; }
+}
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+  window.location.href = '/login';
+});
+
 window.load = load;
+bootstrapAuth();  // sets agent name in header, redirects if not auth'd
 loadAiState();
 pollNotifications();
 load();

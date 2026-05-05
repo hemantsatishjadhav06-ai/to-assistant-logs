@@ -15,11 +15,94 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MAX_ENTRIES = parseInt(process.env.MAX_ENTRIES || '50000', 10);  // bumped — disk-backed now
 const ADMIN_KEY = process.env.ADMIN_KEY || '';
+
+// ===== AUTH (v3.0) =====
+// DASHBOARD_PASSWORD: shared password for all support agents. Required to log in.
+// BOT_AUTH_TOKEN:     shared secret bots must send as Authorization: Bearer <token>
+//                     when calling /log, /api/state, /api/poll-replies,
+//                     /api/customer-needs-human. Prevents random people from
+//                     spamming logs or firing fake "talk to human" notifications.
+// If either env var is unset, that auth layer is disabled (open mode) — log a
+// warning at boot. Production must have both.
+const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || '';
+const BOT_AUTH_TOKEN = process.env.BOT_AUTH_TOKEN || '';
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const sessions = new Map(); // sessionId -> { agent_name, expires_at }
+const loginAttempts = new Map(); // ip -> [timestamps] (for rate-limit)
+
+// Tiny inline cookie helpers — no deps
+function parseCookies(req) {
+  const out = {};
+  const c = req.headers.cookie || '';
+  c.split(';').forEach(p => {
+    const idx = p.indexOf('=');
+    if (idx < 0) return;
+    const k = p.slice(0, idx).trim();
+    const v = p.slice(idx + 1).trim();
+    if (k) try { out[k] = decodeURIComponent(v); } catch { out[k] = v; }
+  });
+  return out;
+}
+function setCookie(res, name, value, opts = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`];
+  if (opts.maxAge !== undefined) parts.push(`Max-Age=${opts.maxAge}`);
+  parts.push(`Path=${opts.path || '/'}`);
+  if (opts.httpOnly !== false) parts.push('HttpOnly');
+  if (opts.secure !== false) parts.push('Secure');
+  parts.push(`SameSite=${opts.sameSite || 'Lax'}`);
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+function safeEqStr(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  try { return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b)); } catch { return false; }
+}
+function newSessionId() { return crypto.randomBytes(32).toString('hex'); }
+function getSession(req) {
+  const sid = parseCookies(req)['to_session'];
+  if (!sid) return null;
+  const sess = sessions.get(sid);
+  if (!sess) return null;
+  if (sess.expires_at < Date.now()) { sessions.delete(sid); return null; }
+  return sess;
+}
+function clientIp(req) {
+  return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'unknown';
+}
+// Periodic session cleanup (no leaks)
+setInterval(() => {
+  const now = Date.now();
+  for (const [sid, s] of sessions) if (s.expires_at < now) sessions.delete(sid);
+  for (const [ip, ts] of loginAttempts) {
+    const fresh = ts.filter(t => now - t < 60_000);
+    if (fresh.length === 0) loginAttempts.delete(ip);
+    else loginAttempts.set(ip, fresh);
+  }
+}, 5 * 60 * 1000).unref();
+
+// Middleware: require an authenticated agent (cookie session)
+function requireAgent(req, res, next) {
+  const sess = getSession(req);
+  if (!sess) return res.status(401).json({ ok: false, error: 'auth_required' });
+  req.agent = sess;
+  next();
+}
+// Middleware: require bot auth (Authorization: Bearer <token>)
+function requireBot(req, res, next) {
+  if (!BOT_AUTH_TOKEN) return next(); // open mode — warned at boot
+  const auth = req.headers.authorization || '';
+  const expected = `Bearer ${BOT_AUTH_TOKEN}`;
+  if (!safeEqStr(auth, expected)) {
+    return res.status(401).json({ ok: false, error: 'bot_auth_required' });
+  }
+  next();
+}
 
 // Persistence: data dir survives redeploys IF a Render disk is mounted there.
 // Without a disk, falls back to ephemeral local dir (data lost on redeploy).
@@ -29,7 +112,13 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
 
 app.set('trust proxy', 1);
-app.use(cors());
+// CORS: same-origin XHR (dashboard JS calling its own API) doesn't need CORS.
+// Bot calls send credentials in Authorization header, not cookies — also fine.
+// Restrict to specific origins to prevent cross-origin reads of customer logs.
+app.use(cors({
+  origin: false,            // disallow cross-origin browsers from reading
+  credentials: true
+}));
 app.use(express.json({ limit: '1mb' }));
 
 const logs = [];
@@ -149,7 +238,64 @@ function pushLog(entry) {
   appendLogToDisk(entry);
 }
 
-app.post('/log', (req, res) => {
+// ============================================================
+// AUTH endpoints (v3.0)
+// ============================================================
+// POST /api/login — body: {password, agent_name} → sets session cookie
+app.post('/api/login', (req, res) => {
+  const ip = clientIp(req);
+  // Rate limit: 5 attempts per minute per IP
+  const now = Date.now();
+  const attempts = (loginAttempts.get(ip) || []).filter(t => now - t < 60_000);
+  if (attempts.length >= 5) {
+    return res.status(429).json({ ok: false, error: 'too_many_attempts' });
+  }
+  attempts.push(now);
+  loginAttempts.set(ip, attempts);
+
+  const { password, agent_name } = req.body || {};
+  if (!password || !agent_name) {
+    return res.status(400).json({ ok: false, error: 'password_and_agent_name_required' });
+  }
+  if (!DASHBOARD_PASSWORD) {
+    return res.status(500).json({ ok: false, error: 'server_not_configured' });
+  }
+  if (!safeEqStr(String(password), DASHBOARD_PASSWORD)) {
+    return res.status(401).json({ ok: false, error: 'invalid_password' });
+  }
+  const trimmedName = String(agent_name).trim().slice(0, 60);
+  if (!trimmedName) {
+    return res.status(400).json({ ok: false, error: 'agent_name_required' });
+  }
+  const sid = newSessionId();
+  sessions.set(sid, {
+    agent_name: trimmedName,
+    expires_at: now + SESSION_TTL_MS
+  });
+  // Reset rate limit on successful login
+  loginAttempts.delete(ip);
+  setCookie(res, 'to_session', sid, { maxAge: SESSION_TTL_MS / 1000 });
+  console.log(`[auth] login ok: agent="${trimmedName}" ip=${ip}`);
+  res.json({ ok: true, agent_name: trimmedName });
+});
+
+// POST /api/logout — clears session
+app.post('/api/logout', (req, res) => {
+  const sid = parseCookies(req)['to_session'];
+  if (sid) sessions.delete(sid);
+  setCookie(res, 'to_session', '', { maxAge: 0 });
+  res.json({ ok: true });
+});
+
+// GET /api/me — returns current agent (requires auth)
+app.get('/api/me', requireAgent, (req, res) => {
+  res.json({ ok: true, agent_name: req.agent.agent_name });
+});
+
+// ============================================================
+// BOT-FACING endpoints (require BOT_AUTH_TOKEN)
+// ============================================================
+app.post('/log', requireBot, (req, res) => {
   try {
     const b = req.body || {};
     const entry = {
@@ -222,7 +368,10 @@ app.post('/zoho', (req, res) => {
   }
 });
 
-app.get('/api/logs', (req, res) => {
+// ============================================================
+// DASHBOARD-FACING endpoints (require agent session cookie)
+// ============================================================
+app.get('/api/logs', requireAgent, (req, res) => {
   const sport = (req.query.sport || '').toString().toLowerCase();
   const q = (req.query.q || '').toString().toLowerCase();
   const limit = Math.min(parseInt(req.query.limit || '200', 10) || 200, MAX_ENTRIES);
@@ -309,14 +458,14 @@ app.delete('/api/logs', (req, res) => {
 // ============================================================
 
 // GET /api/state?sport=tennis&session_id=abc — bot calls this every chat turn
-app.get('/api/state', (req, res) => {
+app.get('/api/state', requireBot, (req, res) => {
   const sport = String(req.query.sport || '').toLowerCase();
   const sessionId = String(req.query.session_id || '');
   res.json(resolveAiOn(sport, sessionId));
 });
 
 // GET /api/state-all — dashboard reads everything for the toggle UI
-app.get('/api/state-all', (req, res) => {
+app.get('/api/state-all', requireAgent, (req, res) => {
   res.json({
     global: aiState.global,
     perCustomer: aiState.perCustomer,
@@ -325,7 +474,7 @@ app.get('/api/state-all', (req, res) => {
 });
 
 // POST /api/toggle  body: {scope:'global'|'session', id, value:'on'|'off'}
-app.post('/api/toggle', (req, res) => {
+app.post('/api/toggle', requireAgent, (req, res) => {
   const { scope, id, value } = req.body || {};
   if (!['global', 'session'].includes(scope)) return res.status(400).json({ ok: false, error: 'bad scope' });
   if (!['on', 'off'].includes(value)) return res.status(400).json({ ok: false, error: 'bad value' });
@@ -343,7 +492,7 @@ app.post('/api/toggle', (req, res) => {
 
 // POST /api/customer-needs-human  body: {session_id, sport}
 // Called by bot when customer clicks "Talk to a human" button OR auto-handoff fires.
-app.post('/api/customer-needs-human', (req, res) => {
+app.post('/api/customer-needs-human', requireBot, (req, res) => {
   const { session_id, sport, type } = req.body || {};
   if (!session_id) return res.status(400).json({ ok: false, error: 'session_id required' });
   // Auto-flip per-customer toggle to OFF
@@ -366,13 +515,14 @@ app.post('/api/customer-needs-human', (req, res) => {
 
 // POST /api/human-message  body: {session_id, text, agent_name, sport}
 // Operator types a reply in the dashboard → message goes here → bot polls and delivers.
-app.post('/api/human-message', (req, res) => {
-  const { session_id, text, agent_name, sport } = req.body || {};
+app.post('/api/human-message', requireAgent, (req, res) => {
+  const { session_id, text, sport } = req.body || {};
   if (!session_id || !text) return res.status(400).json({ ok: false, error: 'session_id + text required' });
+  // v3.0: agent_name comes from session (auth'd), not request body — prevents impersonation
   const msg = {
     id: ++pendingReplyId,
     text: String(text).slice(0, 4000),
-    agent_name: String(agent_name || 'Support'),
+    agent_name: String(req.agent.agent_name || 'Support'),
     timestamp: new Date().toISOString(),
     delivered_at: null
   };
@@ -399,7 +549,7 @@ app.post('/api/human-message', (req, res) => {
 
 // GET /api/poll-replies?session_id=&since= — returns undelivered replies for that session.
 // Called by bot's chat widget on a 2s loop. `since` is the last-seen reply id.
-app.get('/api/poll-replies', (req, res) => {
+app.get('/api/poll-replies', requireBot, (req, res) => {
   const sessionId = String(req.query.session_id || '');
   const since = parseInt(req.query.since || '0', 10) || 0;
   if (!sessionId) return res.status(400).json({ ok: false, error: 'session_id required' });
@@ -411,7 +561,7 @@ app.get('/api/poll-replies', (req, res) => {
 });
 
 // GET /api/notifications?since= — dashboard polls for new alerts (talk-to-human).
-app.get('/api/notifications', (req, res) => {
+app.get('/api/notifications', requireAgent, (req, res) => {
   const since = parseInt(req.query.since || '0', 10) || 0;
   const fresh = notifications.filter(n => n.id > since);
   const unreadCount = notifications.filter(n => n.status === 'unread').length;
@@ -419,7 +569,7 @@ app.get('/api/notifications', (req, res) => {
 });
 
 // POST /api/notifications/ack  body: {ids:[...]}
-app.post('/api/notifications/ack', (req, res) => {
+app.post('/api/notifications/ack', requireAgent, (req, res) => {
   const ids = (req.body && req.body.ids) || [];
   const idSet = new Set(ids.map(Number));
   let acked = 0;
@@ -430,12 +580,26 @@ app.post('/api/notifications/ack', (req, res) => {
   res.json({ ok: true, acked });
 });
 
+// /login is the public login page — must be served before the auth gate on /
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Static assets (login.html stylesheet, JS, etc.)
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Root: serve dashboard if authed, otherwise redirect to /login
 app.get('/', (req, res) => {
+  if (!getSession(req)) {
+    return res.redirect('/login');
+  }
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
   console.log(`[logs] listening on :${PORT} (max_entries=${MAX_ENTRIES})`);
+  if (DASHBOARD_PASSWORD) console.log('[auth] dashboard auth ENABLED (password required to log in)');
+  else console.warn('[auth] WARNING: DASHBOARD_PASSWORD not set — dashboard endpoints will reject all requests');
+  if (BOT_AUTH_TOKEN) console.log('[auth] bot auth ENABLED (Bearer token required on bot-facing endpoints)');
+  else console.warn('[auth] WARNING: BOT_AUTH_TOKEN not set — bot-facing endpoints OPEN');
 });
