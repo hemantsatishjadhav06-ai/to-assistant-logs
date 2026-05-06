@@ -224,6 +224,7 @@ a { color: inherit; }
       <div class="nav-item active" id="navUnclaimed" data-filter="unclaimed" onclick="setFilter(this)"><span class="ico">📬</span> Unclaimed <span class="count" id="cntUnclaimed">0</span></div>
       <div class="nav-item" data-filter="mine" onclick="setFilter(this)"><span class="ico">⭐</span> Mine <span class="count" id="cntMine">0</span></div>
       <div class="nav-item" data-filter="all" onclick="setFilter(this)"><span class="ico">💬</span> All <span class="count" id="cntAll">0</span></div>
+      <div class="nav-item" data-filter="closed" onclick="setFilter(this)"><span class="ico">✅</span> Closed <span class="count" id="cntClosed">0</span></div>
     </div>
     <div class="nav-section">
       <div class="nav-label">Stores · global AI</div>
@@ -314,7 +315,9 @@ const State = {
   search: '',
   pollTimer: null,
   pollErrors: 0,
+  closedSids: new Set(JSON.parse(localStorage.getItem('os.closedSids') || '[]')),
 };
+function _persistClosed() { localStorage.setItem('os.closedSids', JSON.stringify(Array.from(State.closedSids))); }
 
 /* ---------- API helpers ---------- */
 async function api(path, opts = {}) {
@@ -456,6 +459,9 @@ function ageLabel(ts) {
 function applyFilters(list) {
   return list.filter(c => {
     if (State.sportFilter !== 'all' && c.sport !== State.sportFilter) return false;
+    const closed = State.closedSids.has(c.session_id);
+    if (State.inboxFilter === 'closed' && !closed) return false;
+    if (State.inboxFilter !== 'closed' && closed) return false;
     const s = statusFor(c);
     if (State.inboxFilter === 'unclaimed' && s.kind !== 'unclaimed') return false;
     if (State.inboxFilter === 'mine' && !(s.kind === 'claimed' && (s.who || '').toLowerCase() === (State.agent.agent_name || '').toLowerCase())) return false;
@@ -478,6 +484,8 @@ function render() {
   document.getElementById('cntUnclaimed').textContent = unclaimed;
   document.getElementById('cntMine').textContent = mine;
   document.getElementById('cntAll').textContent = all.length;
+  const closedCount = all.filter(c => State.closedSids.has(c.session_id)).length;
+  const elClosed = document.getElementById('cntClosed'); if (elClosed) elClosed.textContent = closedCount;
   // Sidebar AI on/off badges
   document.getElementById('aiTennis').textContent = State.aiState.global.tennis === 'off' ? 'OFF' : 'ON';
   document.getElementById('aiPadel').textContent  = State.aiState.global.padel  === 'off' ? 'OFF' : 'ON';
@@ -492,7 +500,8 @@ function render() {
   const filtered = applyFilters(all);
   document.getElementById('listTitle').textContent =
     State.inboxFilter === 'unclaimed' ? 'Unclaimed' :
-    State.inboxFilter === 'mine'      ? 'Mine' : 'All conversations';
+    State.inboxFilter === 'mine'      ? 'Mine' :
+    State.inboxFilter === 'closed'    ? 'Closed' : 'All conversations';
   document.getElementById('listSub').textContent =
     `${filtered.length} of ${all.length}` + (State.search ? ` matching "${State.search}"` : '');
   const root = document.getElementById('convList');
@@ -544,6 +553,7 @@ function renderDetail() {
   const replyDisabled = !isMine && s.kind !== 'unclaimed';
   const canTake = s.kind === 'unclaimed';
   const canHandBack = isMine;
+  const isClosed = State.closedSids.has(c.session_id);
 
   root.innerHTML = `
     <div class="thread-col">
@@ -554,10 +564,12 @@ function renderDetail() {
           <div class="who-meta">session ${escapeHtml(c.session_id)} · ${c.messages.length} msgs · started ${ageLabel(c.last_msg_at)} ago</div>
         </div>
         <div class="actions">
-          ${canTake ? `<button class="btn primary" onclick="openTakeover()">⚡ Take over</button>` : ''}
+          ${isClosed ? `<button class="btn" onclick="reopenConversation()">↺ Reopen</button>` : ''}
+          ${canTake && !isClosed ? `<button class="btn primary" onclick="openTakeover()">⚡ Take over</button>` : ''}
           ${canHandBack ? `<button class="btn danger" onclick="handBack()">↩️ Hand back to AI</button>` : ''}
-          ${!canTake && !canHandBack && s.kind === 'claimed' ? `<span class="btn" style="background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.3);color:#10b981;cursor:default;">${escapeHtml(s.who)} is talking</span>` : ''}
-          ${!canTake && !canHandBack && s.kind === 'ai' ? `<span class="btn" style="cursor:default;color:var(--text-muted);">AI is handling</span>` : ''}
+          ${!canTake && !canHandBack && !isClosed && s.kind === 'claimed' ? `<span class="btn" style="background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.3);color:#10b981;cursor:default;">${escapeHtml(s.who)} is talking</span>` : ''}
+          ${!canTake && !canHandBack && !isClosed && s.kind === 'ai' ? `<span class="btn" style="cursor:default;color:var(--text-muted);">AI is handling</span>` : ''}
+          ${!isClosed ? `<button class="btn" title="Close conversation (e)" onclick="closeConversation()">✓ Close</button>` : ''}
         </div>
       </div>
 
@@ -623,26 +635,105 @@ function renderDetail() {
 
 function msgHtml(m) {
   const src = m.source || 'bot';
-  const grp = src === 'bot' ? 'bot' : (src === 'human' ? 'human' : 'cust');
-  const who = src === 'bot' ? 'AI' : (src === 'human' ? (m.agent_name || 'Agent') : 'Customer');
-  const text = src === 'bot' ? (m.ai_response || '(empty)') :
-               src === 'human' ? (m.ai_response || '(empty)') :
-               (m.user_query || '(empty)');
   const t = m.timestamp ? new Date(m.timestamp).toTimeString().slice(0,5) : '';
   const sc = m.intent && /short_circuit|warehouse|cross_store_info|cross_sport_redirect|support_contact|upgrade_program|order_handoff/.test(m.intent);
-  return `
-    <div class="msg-group ${grp}">
-      <div class="msg-meta">
-        <span class="source-badge ${grp}">${escapeHtml(who)}</span>
-        <span>${t}</span>
-        ${m.intent ? `<span style="color:var(--text-soft);font-size:11px;">intent: ${escapeHtml(m.intent)}</span>` : ''}
-        ${sc ? `<span class="short-circuit-tag">deterministic</span>` : ''}
-      </div>
-      <div class="bubble">${escapeHtml(text)}</div>
-    </div>`;
+  const intentBadge = m.intent ? `<span style="color:var(--text-soft);font-size:11px;">intent: ${escapeHtml(m.intent)}</span>` : '';
+  const scBadge = sc ? `<span class="short-circuit-tag">deterministic</span>` : '';
+
+  // Render an agent reply (source='human')
+  if (src === 'human') {
+    const txt = m.ai_response || '(empty)';
+    return `
+      <div class="msg-group human">
+        <div class="msg-meta">
+          <span class="source-badge human">${escapeHtml(m.agent_name || 'Agent')}</span>
+          <span>${t}</span>
+          ${intentBadge}
+        </div>
+        <div class="bubble">${escapeHtml(txt)}</div>
+      </div>`;
+  }
+
+  // Render a customer-only entry
+  if (src === 'cust' || src === 'customer') {
+    const txt = m.user_query || '(empty)';
+    return `
+      <div class="msg-group cust">
+        <div class="msg-meta">
+          <span class="source-badge cust">Customer</span>
+          <span>${t}</span>
+        </div>
+        <div class="bubble">${escapeHtml(txt)}</div>
+      </div>`;
+  }
+
+  // source='bot' — bot log entry contains BOTH the customer's question AND the AI reply.
+  // Split into two bubbles so the agent sees the full back-and-forth.
+  const userQ = (m.user_query || '').trim();
+  const aiR   = (m.ai_response || '').trim();
+  let html = '';
+  if (userQ) {
+    html += `
+      <div class="msg-group cust">
+        <div class="msg-meta">
+          <span class="source-badge cust">Customer</span>
+          <span>${t}</span>
+        </div>
+        <div class="bubble">${escapeHtml(userQ)}</div>
+      </div>`;
+  }
+  if (aiR) {
+    html += `
+      <div class="msg-group bot">
+        <div class="msg-meta">
+          <span class="source-badge bot">AI</span>
+          <span>${t}</span>
+          ${intentBadge}
+          ${scBadge}
+        </div>
+        <div class="bubble">${escapeHtml(aiR)}</div>
+      </div>`;
+  }
+  if (!html) {
+    html = `<div class="msg-group bot"><div class="msg-meta"><span class="source-badge bot">AI</span><span>${t}</span></div><div class="bubble">(empty)</div></div>`;
+  }
+  return html;
 }
 
 /* ---------- Actions ---------- */
+async function closeConversation() {
+  const sid = State.selectedSid;
+  if (!sid) return;
+  const c = State.conversations.find(x => x.session_id === sid);
+  if (!c) return;
+  if (!confirm('Close this conversation?\n\nIt will move to "Closed" and AI will be turned back ON for this customer.')) return;
+  try {
+    // Hand AI back on (idempotent — no-op if already on)
+    await api('/api/toggle', { method:'POST', body: JSON.stringify({ scope:'session', id: sid, value:'on' })}).catch(()=>{});
+    State.aiState.perCustomer[sid] = 'on';
+    State.closedSids.add(sid);
+    _persistClosed();
+    toast('Conversation closed', 'ok');
+    // Jump to next conversation in current view
+    const list = applyFilters(State.conversations);
+    if (list.length === 0) {
+      State.selectedSid = null;
+    } else {
+      State.selectedSid = list[0].session_id;
+    }
+    render();
+  } catch (e) {
+    toast('Close failed: '+e.message, 'err');
+  }
+}
+async function reopenConversation() {
+  const sid = State.selectedSid;
+  if (!sid) return;
+  State.closedSids.delete(sid);
+  _persistClosed();
+  toast('Conversation reopened', 'ok');
+  render();
+}
 function selectConv(sid) {
   State.selectedSid = sid;
   render();
@@ -813,6 +904,8 @@ document.addEventListener('keydown', (e) => {
     else toast('Already in this chat or AI is handling', 'ok');
   } else if (e.key === 'h') {
     handBack();
+  } else if (e.key === 'e') {
+    closeConversation();
   } else if (e.key === 'r') {
     const ta = document.getElementById('replyText');
     if (ta && !ta.disabled) ta.focus();
