@@ -112,6 +112,74 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
 
 app.set('trust proxy', 1);
+
+// ===== v2.2 SECURITY HARDENING =====
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('X-DNS-Prefetch-Control', 'off');
+  res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+  if (req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+    "script-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:; " +
+    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; media-src 'self' data:");
+  next();
+});
+
+// Per-bot-token sliding-window rate limit
+const _botRate = new Map();
+function botRateLimit(maxPerMin) {
+  return (req, res, next) => {
+    if (!BOT_AUTH_TOKEN) return next();
+    const auth = req.headers['authorization'] || '';
+    const tok = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!tok) return next();
+    const key = crypto.createHash('sha256').update(tok).digest('hex').slice(0, 16);
+    const now = Date.now();
+    const arr = (_botRate.get(key) || []).filter(t => now - t < 60_000);
+    if (arr.length >= maxPerMin) {
+      res.setHeader('Retry-After', '60');
+      return res.status(429).json({ ok: false, error: 'rate_limited', limit: maxPerMin, window_sec: 60 });
+    }
+    arr.push(now);
+    _botRate.set(key, arr);
+    next();
+  };
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, arr] of _botRate) {
+    const f = arr.filter(t => now - t < 60_000);
+    if (!f.length) _botRate.delete(k); else _botRate.set(k, f);
+  }
+}, 60_000).unref();
+
+// Audit log — append-only JSONL
+const AUDIT_FILE = path.join(process.env.LOGS_DATA_DIR || '/var/data', 'audit.jsonl');
+function audit(req, action, target, before, after) {
+  try {
+    const sess = (typeof getSession === 'function') ? getSession(req) : null;
+    const auth = req.headers['authorization'] || '';
+    const isBot = auth.startsWith('Bearer ');
+    const entry = {
+      ts: new Date().toISOString(),
+      actor_type: sess ? 'agent' : (isBot ? 'bot' : 'anon'),
+      actor: sess ? sess.agent_name : (isBot ? 'bot' : null),
+      action, target,
+      before: before === undefined ? null : before,
+      after: after === undefined ? null : after,
+      ip: clientIp(req),
+      ua: (req.headers['user-agent'] || '').slice(0, 200)
+    };
+    fs.appendFile(AUDIT_FILE, JSON.stringify(entry) + '\n', () => {});
+  } catch (_) {}
+}
+
+
 // CORS: same-origin XHR (dashboard JS calling its own API) doesn't need CORS.
 // Bot calls send credentials in Authorization header, not cookies — also fine.
 // Restrict to specific origins to prevent cross-origin reads of customer logs.
@@ -295,7 +363,7 @@ app.get('/api/me', requireAgent, (req, res) => {
 // ============================================================
 // BOT-FACING endpoints (require BOT_AUTH_TOKEN)
 // ============================================================
-app.post('/log', requireBot, (req, res) => {
+app.post('/log', botRateLimit(300), requireBot, (req, res) => {
   try {
     const b = req.body || {};
     const entry = {
@@ -396,6 +464,8 @@ app.get('/api/logs', requireAgent, (req, res) => {
   });
 });
 
+app.get('/healthz', (req, res) => res.json({ ok: true }));
+
 app.get('/api/health', (req, res) => {
   const pendingReplyCount = Object.values(pendingReplies).reduce((sum, arr) => sum + arr.filter(m => !m.delivered_at).length, 0);
   let dataSize = null;
@@ -479,6 +549,7 @@ app.post('/api/toggle', requireAgent, (req, res) => {
   if (!['global', 'session'].includes(scope)) return res.status(400).json({ ok: false, error: 'bad scope' });
   if (!['on', 'off'].includes(value)) return res.status(400).json({ ok: false, error: 'bad value' });
   if (!id) return res.status(400).json({ ok: false, error: 'id required' });
+  const _before = scope === 'global' ? aiState.global[id] : aiState.perCustomer[id];
   if (scope === 'global') {
     if (!['tennis', 'padel', 'pickleball'].includes(id)) return res.status(400).json({ ok: false, error: 'bad sport' });
     aiState.global[id] = value;
@@ -486,13 +557,14 @@ app.post('/api/toggle', requireAgent, (req, res) => {
     aiState.perCustomer[id] = value;
   }
   saveStateDebounced();
+  audit(req, 'toggle_ai', `${scope}:${id}`, _before, value);
   console.log(`[toggle] ${scope}=${id} → ${value}`);
   res.json({ ok: true, scope, id, value });
 });
 
 // POST /api/customer-needs-human  body: {session_id, sport}
 // Called by bot when customer clicks "Talk to a human" button OR auto-handoff fires.
-app.post('/api/customer-needs-human', requireBot, (req, res) => {
+app.post('/api/customer-needs-human', botRateLimit(60), requireBot, (req, res) => {
   const { session_id, sport, type } = req.body || {};
   if (!session_id) return res.status(400).json({ ok: false, error: 'session_id required' });
   // Auto-flip per-customer toggle to OFF
@@ -543,6 +615,7 @@ app.post('/api/human-message', requireAgent, (req, res) => {
     agent_name: msg.agent_name,
     meta: ''
   });
+  audit(req, 'send_reply', `${sport}:${session_id}`, null, msg.text.slice(0,200));
   console.log(`[human-msg] sport=${sport} session=${session_id} agent=${msg.agent_name} text="${msg.text.slice(0,80)}"`);
   res.json({ ok: true, id: msg.id });
 });
@@ -577,6 +650,7 @@ app.post('/api/notifications/ack', requireAgent, (req, res) => {
     if (idSet.has(n.id) && n.status === 'unread') { n.status = 'read'; acked++; }
   }
   if (acked) saveStateDebounced();
+  if (acked) audit(req, 'notif_ack', String((req.body && req.body.id) || ''), null, 'acked');
   res.json({ ok: true, acked });
 });
 
