@@ -1,1008 +1,831 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TO Assistant — Conversation Logs</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OutletSupport — Agent Console</title>
 <style>
-  :root {
-    --bg: #0f1419;
-    --panel: #1a2129;
-    --panel-2: #232c38;
-    --border: #2a3440;
-    --border-strong: #3a4654;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --accent: #58a6ff;
-    --tennis: #d4ff5e;
-    --padel: #ff8a3d;
-    --pickleball: #ffd23f;
-    --human: #a371f7;
-    --bot: #58a6ff;
-    --user-bubble: #1f2937;
-    --bot-bubble: #1d3a5b;
-    --human-bubble: #3a1f5b;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 14px;
-  }
-  header {
-    padding: 14px 24px;
-    border-bottom: 1px solid var(--border);
-    background: var(--panel);
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    flex-wrap: wrap;
-    position: sticky; top: 0; z-index: 10;
-  }
-  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-  header .stats { color: var(--muted); font-size: 13px; }
-  header .stats strong { color: var(--text); }
-  .controls {
-    padding: 12px 24px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-    position: sticky; top: 51px; z-index: 9;
-  }
-  .controls select, .controls input[type=text], .controls input[type=date] {
-    background: var(--bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 13px;
-    font-family: inherit;
-  }
-  .controls input[type=text] { min-width: 260px; }
-  .controls input[type=date] { color-scheme: dark; }
-  .controls label { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
-  .controls button {
-    background: var(--accent);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 8px 14px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-  }
-  .controls button:hover { opacity: 0.9; }
-  .pill {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-  }
-  .pill.tennis { background: rgba(212, 255, 94, 0.15); color: var(--tennis); border: 1px solid rgba(212, 255, 94, 0.4); }
-  .pill.padel { background: rgba(255, 138, 61, 0.15); color: var(--padel); border: 1px solid rgba(255, 138, 61, 0.4); }
-  .pill.pickleball { background: rgba(255, 210, 63, 0.15); color: var(--pickleball); border: 1px solid rgba(255, 210, 63, 0.4); }
-  .pill.unknown { background: rgba(139, 148, 158, 0.15); color: var(--muted); border: 1px solid var(--border); }
-  .pill.bot { background: rgba(88, 166, 255, 0.15); color: var(--bot); border: 1px solid rgba(88, 166, 255, 0.4); }
-  .pill.human { background: rgba(163, 113, 247, 0.15); color: var(--human); border: 1px solid rgba(163, 113, 247, 0.4); }
+:root {
+  --brand-yellow: #facc15;
+  --brand-yellow-soft: #fef3c7;
+  --brand-yellow-deep: #ca8a04;
+  --sport-tennis: #22c55e;
+  --sport-padel:  #06b6d4;
+  --sport-pickle: #eab308;
+  --priority-1: #ef4444;
+  --priority-2: #f97316;
+  --priority-3: #6b7280;
+  --radius:   10px;
+  --radius-l: 14px;
+  --shadow-l: 0 8px 30px rgba(0,0,0,.18);
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+[data-theme="dark"] {
+  --bg:        #0f1115;
+  --bg-elev:   #161922;
+  --bg-elev-2: #1d212c;
+  --border:    #262b38;
+  --text:      #e6e8ee;
+  --text-muted:#94a0b6;
+  --text-soft: #6c778d;
+  --hover:     #1e2230;
+}
+[data-theme="light"] {
+  --bg:        #f6f7f9;
+  --bg-elev:   #ffffff;
+  --bg-elev-2: #f0f2f5;
+  --border:    #e3e6eb;
+  --text:      #1a1d24;
+  --text-muted:#5a6478;
+  --text-soft: #8d97a8;
+  --hover:     #eef0f4;
+}
+* { box-sizing: border-box; margin:0; padding:0; }
+html, body { height:100%; }
+body { font-family: var(--font-ui); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased; display: grid; grid-template-rows: 56px 1fr; }
+button, input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: transparent; }
+a { color: inherit; }
 
-  .container { padding: 16px 24px 60px; }
-  .section-title {
-    font-size: 13px;
-    color: var(--muted);
-    margin: 16px 0 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    font-weight: 600;
-  }
+.topbar { display: flex; align-items: center; gap: 14px; padding: 0 18px; background: var(--bg-elev); border-bottom: 1px solid var(--border); z-index: 5; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; font-size: 15px; }
+.brand .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--brand-yellow) 0%, var(--brand-yellow-deep) 100%); display: grid; place-items: center; color: #1a1d24; font-weight: 800; font-size: 14px; box-shadow: 0 2px 6px rgba(202,138,4,.25); }
+.brand .pill { margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--bg-elev-2); color: var(--text-muted); font-size: 11px; font-weight: 500; }
+.global-search { flex: 1; max-width: 480px; position: relative; }
+.global-search input { width: 100%; padding: 8px 12px 8px 34px; background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--radius); outline: none; transition: border-color .15s; }
+.global-search input:focus { border-color: var(--brand-yellow); }
+.global-search::before { content: "🔍"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-size: 12px; opacity: .55; pointer-events: none; }
+.top-actions { display:flex; gap: 8px; align-items: center; margin-left:auto; }
+.icon-btn { width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; color: var(--text-muted); position: relative; transition: background .15s, color .15s; }
+.icon-btn:hover { background: var(--hover); color: var(--text); }
+.icon-btn .dot-badge { position: absolute; top: 6px; right: 6px; background: var(--priority-1); width: 8px; height: 8px; border-radius: 999px; border: 2px solid var(--bg-elev); }
+.icon-btn .dot-badge.zero { display:none; }
+.agent-chip { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 999px; background: var(--bg-elev-2); border: 1px solid var(--border); }
+.avatar { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; font-weight: 600; font-size: 12px; flex-shrink: 0; }
 
-  /* ===== Customer cards (grouped view) ===== */
-  .customer-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    margin-bottom: 14px;
-    overflow: hidden;
-  }
-  .customer-card.has-human { border-color: rgba(163, 113, 247, 0.4); }
-  .customer-card.has-handoff { border-left: 3px solid var(--human); }
-  .customer-header {
-    background: var(--panel-2);
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    cursor: pointer;
-    user-select: none;
-    border-bottom: 1px solid var(--border);
-  }
-  .customer-header:hover { background: #2a3340; }
-  .customer-header .chevron {
-    width: 14px;
-    color: var(--muted);
-    font-size: 11px;
-    transition: transform 0.15s;
-    display: inline-block;
-  }
-  .customer-card.collapsed .chevron { transform: rotate(-90deg); }
-  .customer-card.collapsed .customer-body { display: none; }
-  .customer-id {
-    font-family: ui-monospace, SFMono-Regular, monospace;
-    font-size: 12px;
-    color: var(--text);
-    font-weight: 600;
-  }
-  .customer-meta {
-    color: var(--muted);
-    font-size: 12px;
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: center;
-    margin-left: auto;
-  }
-  .customer-meta .sep { color: var(--border-strong); }
-  .turn-count {
-    background: var(--bg);
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 11px;
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-weight: 500;
-  }
+.app { display: grid; grid-template-columns: 220px 360px 1fr; overflow: hidden; }
+.sidebar { border-right: 1px solid var(--border); background: var(--bg-elev); padding: 16px 10px; overflow-y: auto; }
+.nav-section { margin-bottom: 22px; }
+.nav-label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-soft); padding: 0 10px; margin-bottom: 6px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--text-muted); cursor: pointer; transition: background .15s, color .15s; font-weight: 500; }
+.nav-item:hover { background: var(--hover); color: var(--text); }
+.nav-item.active { background: var(--brand-yellow); color: #1a1d24; }
+.nav-item.active .count { background: rgba(0,0,0,.15); color: #1a1d24; }
+.nav-item .ico { width: 18px; opacity: .85; }
+.nav-item .count { margin-left: auto; background: var(--bg-elev-2); color: var(--text-muted); font-size: 11px; padding: 2px 7px; border-radius: 999px; font-weight: 600; }
+.nav-item.urgent .count { background: var(--priority-1); color: white; }
 
-  .customer-body {
-    padding: 14px 16px;
-    background: var(--panel);
-  }
-  .turn {
-    margin-bottom: 14px;
-    padding-bottom: 14px;
-    border-bottom: 1px dashed var(--border);
-  }
-  .turn:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+.list-pane { border-right: 1px solid var(--border); display: grid; grid-template-rows: auto auto 1fr; overflow: hidden; }
+.list-head { padding: 14px 16px 8px; border-bottom: 1px solid var(--border); }
+.list-title { font-weight: 700; font-size: 17px; letter-spacing: -.01em; margin-bottom: 4px; }
+.list-sub { color: var(--text-soft); font-size: 12px; }
+.list-filters { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--text-muted); background: var(--bg-elev); cursor: pointer; transition: all .15s; font-weight: 500; }
+.chip:hover { color: var(--text); border-color: var(--text-soft); }
+.chip.on { background: var(--brand-yellow); border-color: var(--brand-yellow); color: #1a1d24; }
+.chip .swatch { width: 8px; height: 8px; border-radius: 999px; }
 
-  .turn-meta {
-    color: var(--muted);
-    font-size: 11px;
-    margin-bottom: 8px;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  .turn-meta .time { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 500; }
-  .turn-meta .intent { color: var(--accent); font-family: ui-monospace, monospace; }
-  .turn-meta .endpoint { color: var(--muted); font-family: ui-monospace, monospace; font-size: 10px; }
+.conv-list { overflow-y: auto; }
+.conv { padding: 14px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; position: relative; }
+.conv:hover { background: var(--hover); }
+.conv.selected { background: linear-gradient(90deg, rgba(250,204,21,.12), transparent 70%); }
+.conv.selected::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; background: var(--brand-yellow); border-radius: 0 4px 4px 0; }
+.conv-row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.conv-prio { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
+.conv-prio.p1 { background: var(--priority-1); }
+.conv-prio.p2 { background: var(--priority-2); }
+.conv-prio.p3 { background: var(--priority-3); }
+.conv-name { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.conv-sport { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 4px; }
+.conv-sport.tennis { background: rgba(34,197,94,.15); color: #22c55e; }
+.conv-sport.padel  { background: rgba(6,182,212,.15);  color: #06b6d4; }
+.conv-sport.pickleball { background: rgba(234,179,8,.18);  color: #eab308; }
+.conv-time { margin-left: auto; color: var(--text-soft); font-size: 12px; }
+.conv-snippet { color: var(--text-muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px; }
+.conv-meta { display:flex; align-items:center; gap: 8px; font-size: 11.5px; }
+.conv-status { font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+.conv-status.unclaimed { background: rgba(239,68,68,.15); color: #ef4444; }
+.conv-status.claimed   { background: rgba(16,185,129,.15); color: #10b981; }
+.conv-status.ai        { background: rgba(99,102,241,.15); color: #818cf8; }
 
-  .bubble-row { display: flex; gap: 10px; margin-bottom: 6px; }
-  .bubble-row.right { justify-content: flex-end; }
-  .bubble {
-    max-width: min(720px, 82%);
-    padding: 9px 13px;
-    border-radius: 14px;
-    line-height: 1.45;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    font-size: 13.5px;
-  }
-  .bubble.user {
-    background: var(--user-bubble);
-    border-bottom-right-radius: 4px;
-    border: 1px solid #374151;
-  }
-  .bubble.bot {
-    background: var(--bot-bubble);
-    border-bottom-left-radius: 4px;
-    border: 1px solid #2c4f7a;
-  }
-  .bubble.human {
-    background: var(--human-bubble);
-    border-bottom-left-radius: 4px;
-    border: 1px solid #5b3a8a;
-  }
-  .bubble-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--muted);
-    margin-bottom: 4px;
-    font-weight: 600;
-  }
-  .bubble-row.right .bubble-label { text-align: right; }
+.detail { display: grid; grid-template-columns: 1fr 280px; overflow: hidden; }
+.thread-col { display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+.thread-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: var(--bg-elev); }
+.thread-head .who { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.thread-head .who-name { font-weight: 700; font-size: 16px; }
+.thread-head .who-meta { color: var(--text-soft); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thread-head .actions { margin-left: auto; display: flex; gap: 8px; }
 
-  .empty {
-    padding: 80px 24px;
-    text-align: center;
-    color: var(--muted);
-  }
-  .empty code {
-    background: var(--panel);
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-  }
-  footer {
-    padding: 14px 24px;
-    color: var(--muted);
-    font-size: 12px;
-    border-top: 1px solid var(--border);
-    margin-top: 20px;
-  }
-  footer a { color: var(--accent); text-decoration: none; margin-right: 12px; }
-  .live-dot {
-    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    background: #3fb950; margin-right: 6px;
-    animation: pulse 2s ease-in-out infinite;
-  }
-  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+.btn { padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 13px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text); display: inline-flex; align-items: center; gap: 6px; transition: all .15s; }
+.btn:hover:not(:disabled) { background: var(--hover); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn.primary { background: var(--brand-yellow); border-color: var(--brand-yellow); color: #1a1d24; box-shadow: 0 2px 6px rgba(202,138,4,.25); }
+.btn.primary:hover:not(:disabled) { background: var(--brand-yellow-deep); border-color: var(--brand-yellow-deep); color: white; }
+.btn.danger { color: #ef4444; border-color: rgba(239,68,68,.4); }
+.btn.danger:hover:not(:disabled) { background: rgba(239,68,68,.12); }
+.btn.ghost { background: transparent; }
 
-  .view-toggle button {
-    background: var(--panel-2);
-    color: var(--muted);
-    border: 1px solid var(--border);
-    padding: 6px 12px;
-    font-size: 12px;
-    cursor: pointer;
-    border-radius: 6px;
-  }
-  .view-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
-  .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-  .actions button {
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid var(--border);
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 11px;
-    cursor: pointer;
-  }
-  .actions button:hover { color: var(--text); border-color: var(--border-strong); }
+.thread { overflow-y: auto; padding: 22px 22px 12px; background: var(--bg); }
+.msg-group { margin-bottom: 18px; }
+.msg-meta { font-size: 11.5px; color: var(--text-soft); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.source-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; letter-spacing: .04em; text-transform: uppercase; }
+.source-badge.bot   { background: rgba(99,102,241,.15); color:#818cf8; }
+.source-badge.human, .source-badge.agent { background: rgba(250,204,21,.18); color:#ca8a04; }
+.source-badge.cust { background: var(--bg-elev-2); color: var(--text-muted); }
+.bubble { padding: 12px 14px; border-radius: var(--radius-l); background: var(--bg-elev); border: 1px solid var(--border); max-width: 78%; white-space: pre-wrap; word-break: break-word; }
+.msg-group.cust .bubble { background: var(--bg-elev-2); margin-right: auto; }
+.msg-group.bot  .bubble { background: rgba(99,102,241,.10); border-color: rgba(99,102,241,.25); margin-right: auto; }
+.msg-group.human .bubble, .msg-group.agent .bubble { background: var(--brand-yellow-soft); color:#1a1d24; border-color:#fde68a; margin-left:auto; }
+.short-circuit-tag { display:inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: rgba(34,197,94,.15); color: #22c55e; margin-left: 6px; letter-spacing: .04em; }
 
-  /* ========== AI ON/OFF TOGGLE STYLES ========== */
-  .toggle {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    user-select: none;
-  }
-  .toggle input { display: none; }
-  .toggle-track {
-    width: 36px; height: 20px;
-    background: #404a58;
-    border-radius: 10px;
-    position: relative;
-    transition: background 0.15s;
-  }
-  .toggle-track::after {
-    content: '';
-    position: absolute;
-    width: 14px; height: 14px;
-    background: white;
-    border-radius: 50%;
-    top: 3px; left: 3px;
-    transition: left 0.15s, background 0.15s;
-  }
-  .toggle.on .toggle-track { background: #3fb950; }
-  .toggle.on .toggle-track::after { left: 19px; }
-  .toggle-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); }
-  .toggle.on .toggle-label { color: #3fb950; }
+.reply-box { border-top: 1px solid var(--border); background: var(--bg-elev); padding: 14px 18px; }
+.reply-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--text-muted); }
+.reply-tool { display: inline-flex; align-items:center; gap:4px; padding: 4px 10px; border-radius: 6px; background: var(--bg-elev-2); cursor: pointer; transition: all .15s; font-weight: 500; }
+.reply-tool:hover { background: var(--hover); color: var(--text); }
+.reply-tool.ai { background: linear-gradient(90deg, rgba(99,102,241,.15), rgba(168,85,247,.15)); color:#a78bfa; }
+.reply-tool .kbd { font-family: var(--font-mono); font-size: 10.5px; opacity: .7; margin-left: 4px; }
+.reply-input { display: flex; gap: 10px; align-items: flex-end; }
+.reply-input textarea { flex: 1; resize: none; min-height: 64px; max-height: 220px; padding: 12px 14px; border-radius: var(--radius-l); background: var(--bg); border: 1px solid var(--border); outline: none; transition: border-color .15s; line-height: 1.5; }
+.reply-input textarea:focus { border-color: var(--brand-yellow); }
+.send-row { display:flex; align-items:center; gap:8px; }
 
-  /* Global per-sport toggles in header */
-  .global-toggles {
-    display: flex; gap: 14px; align-items: center;
-    margin-left: 24px; padding-left: 24px;
-    border-left: 1px solid var(--border);
-  }
-  .global-toggles .toggle .sport-name {
-    font-size: 11px; font-weight: 600; text-transform: capitalize; color: var(--text);
-  }
+.c360 { border-left: 1px solid var(--border); padding: 18px 16px; overflow-y: auto; background: var(--bg-elev); }
+.c360 h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-soft); margin-bottom: 8px; font-weight: 600; }
+.c360 .field { margin-bottom: 16px; }
+.c360 .v { font-size: 13.5px; color: var(--text); font-weight: 500; margin-bottom: 2px; word-break: break-all; }
+.c360 .v-sub { font-size: 12px; color: var(--text-soft); }
 
-  /* Notification badge in header */
-  .notif-badge {
-    background: #f85149;
-    color: white;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 10px;
-    margin-left: 8px;
-    animation: bounce 1.5s ease-in-out infinite;
-  }
-  .notif-badge.zero { background: var(--border); color: var(--muted); animation: none; }
-  @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+.empty { display: grid; place-items: center; height: 100%; text-align: center; padding: 40px; color: var(--text-muted); }
+.empty .icon { font-size: 56px; margin-bottom: 16px; opacity: .6; }
+.empty h2 { font-size: 22px; margin-bottom: 8px; font-weight: 700; color: var(--text); }
+.empty p { max-width: 380px; margin: 0 auto 18px; }
 
-  /* Customer card with handoff alert */
-  .customer-card.alert {
-    border: 2px solid #f85149 !important;
-    box-shadow: 0 0 0 4px rgba(248, 81, 73, 0.12);
-    animation: alertPulse 2s ease-in-out infinite;
-  }
-  @keyframes alertPulse {
-    0%, 100% { box-shadow: 0 0 0 4px rgba(248, 81, 73, 0.12); }
-    50% { box-shadow: 0 0 0 8px rgba(248, 81, 73, 0.20); }
-  }
-  .alert-banner {
-    background: rgba(248, 81, 73, 0.15);
-    color: #f85149;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+.toast { position: fixed; bottom: 22px; right: 22px; padding: 12px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-l); font-size: 13px; display: flex; align-items: center; gap: 10px; opacity: 0; transform: translateY(8px); pointer-events: none; transition: all .25s; z-index: 100; max-width: 360px; }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast .toast-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--brand-yellow); flex-shrink:0; }
+.toast.err .toast-dot { background: var(--priority-1); }
+.toast.ok .toast-dot { background: #10b981; }
 
-  /* Reply input area inside customer card */
-  .reply-box {
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
-  }
-  .reply-box textarea {
-    flex: 1;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 10px 12px;
-    font-size: 13px;
-    font-family: inherit;
-    border-radius: 6px;
-    resize: vertical;
-    min-height: 40px;
-    max-height: 200px;
-    line-height: 1.4;
-  }
-  .reply-box textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
-  .reply-box .send-btn {
-    background: var(--human);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 9px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  .reply-box .send-btn:hover { opacity: 0.9; }
-  .reply-box .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .reply-hint {
-    font-size: 11px;
-    color: var(--muted);
-    margin-top: 6px;
-  }
+.cheatsheet, .modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 200; }
+.cheatsheet.show, .modal.show { display: flex; }
+.cheatsheet-box, .modal-box { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-l); padding: 22px; box-shadow: var(--shadow-l); }
+.cheatsheet-box { width: 480px; max-width: 92vw; }
+.cheatsheet-box h3, .modal-box h3 { margin-bottom: 16px; font-size: 16px; }
+.cheatsheet-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 22px; }
+.cheatsheet-row { display:flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.cheatsheet-row span:first-child { color: var(--text-muted); font-size: 13px; }
+.kbd { font-family: var(--font-mono); background: var(--bg); padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border); font-size: 11.5px; }
+.modal-box { width: 440px; max-width: 92vw; }
+.modal-box p { color: var(--text-muted); font-size: 13px; margin-bottom: 14px; }
+.modal-box .checklist { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 12.5px; margin-bottom: 16px; }
+.modal-box .checklist .row { display: flex; gap: 8px; padding: 3px 0; color: var(--text-muted); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.boot { position: fixed; inset: 0; display:grid; place-items:center; background: var(--bg); z-index: 999; }
+.spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--brand-yellow); border-radius: 999px; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 1100px) { .app { grid-template-columns: 200px 320px 1fr; } .detail { grid-template-columns: 1fr; } .c360 { display: none; } }
+@media (max-width: 800px)  { .app { grid-template-columns: 1fr; } .sidebar, .list-pane { display: none; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>TO Assistant — Conversation Logs</h1>
-  <div class="stats">
-    <span class="live-dot"></span>
-    <strong id="stat-customers">0</strong> customers ·
-    <strong id="stat-total">0</strong> messages ·
-    <span id="notif-badge-wrap"><span class="notif-badge zero" id="notif-badge">0 waiting</span></span>
+
+<div class="boot" id="boot"><div class="spinner"></div></div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">O</div>
+    <div>OutletSupport</div>
+    <div class="pill">v3.0</div>
   </div>
-  <div class="global-toggles">
-    <label class="toggle on" data-sport="tennis">
-      <span class="sport-name">Tennis AI</span>
-      <span class="toggle-track"></span>
-      <span class="toggle-label" data-state>ON</span>
-    </label>
-    <label class="toggle on" data-sport="padel">
-      <span class="sport-name">Padel AI</span>
-      <span class="toggle-track"></span>
-      <span class="toggle-label" data-state>ON</span>
-    </label>
-    <label class="toggle on" data-sport="pickleball">
-      <span class="sport-name">Pickleball AI</span>
-      <span class="toggle-track"></span>
-      <span class="toggle-label" data-state>ON</span>
-    </label>
+  <div class="global-search">
+    <input id="globalSearch" placeholder="Search messages, intent, session…" oninput="onSearchInput(this.value)">
   </div>
-  <div class="agent-info" id="agent-info" style="margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;">
-    <span>Signed in as <strong id="agent-name" style="color:var(--text);">…</strong></span>
-    <button id="logout-btn" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;">Logout</button>
+  <div class="top-actions">
+    <button class="icon-btn" id="notifBtn" title="Notifications" onclick="onNotifClick()">🔔<span class="dot-badge zero" id="notifBadge"></span></button>
+    <button class="icon-btn" title="Toggle theme" onclick="toggleTheme()">🌓</button>
+    <button class="icon-btn" title="Keyboard shortcuts (?)" onclick="showCheats()">⌨️</button>
+    <div class="agent-chip">
+      <div class="avatar" id="agentAvatar">·</div>
+      <div style="font-size:13px;">
+        <div style="font-weight:600;" id="agentName">…</div>
+        <div style="font-size:11px;color:var(--text-soft);"><a href="#" onclick="logout(event)">Sign out</a></div>
+      </div>
+    </div>
   </div>
 </header>
-<audio id="notif-sound" preload="auto" src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YT9vT18AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="></audio>
 
-<div class="controls">
-  <label>Sport
-    <select id="sport">
-      <option value="">All</option>
-      <option value="tennis">Tennis</option>
-      <option value="padel">Padel</option>
-      <option value="pickleball">Pickleball</option>
-    </select>
-  </label>
-  <label>Type
-    <select id="source">
-      <option value="">All conversations</option>
-      <option value="bot">AI bot only</option>
-      <option value="human">Has human handoff</option>
-    </select>
-  </label>
-  <label>Date from <input type="date" id="dateFrom" /></label>
-  <label>Date to <input type="date" id="dateTo" /></label>
-  <label>Search <input type="text" id="search" placeholder="query, response, intent…" /></label>
-  <span class="view-toggle">
-    <button id="vCustomer" class="active">By customer</button>
-    <button id="vFlat">All messages</button>
-    <button id="vTable">Table</button>
-  </span>
-  <div class="actions">
-    <button id="expandAll">Expand all</button>
-    <button id="collapseAll">Collapse all</button>
-    <button id="refresh">Refresh</button>
-    <label><input type="checkbox" id="autoRefresh" checked /> Auto</label>
+<main class="app">
+  <aside class="sidebar">
+    <div class="nav-section">
+      <div class="nav-label">Inbox</div>
+      <div class="nav-item active" id="navUnclaimed" data-filter="unclaimed" onclick="setFilter(this)"><span class="ico">📬</span> Unclaimed <span class="count" id="cntUnclaimed">0</span></div>
+      <div class="nav-item" data-filter="mine" onclick="setFilter(this)"><span class="ico">⭐</span> Mine <span class="count" id="cntMine">0</span></div>
+      <div class="nav-item" data-filter="all" onclick="setFilter(this)"><span class="ico">💬</span> All <span class="count" id="cntAll">0</span></div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Stores · global AI</div>
+      <div class="nav-item" data-sport="tennis" onclick="toggleSportFilter(this)" id="navTennis"><span class="ico" style="color:var(--sport-tennis);">●</span> TennisOutlet <span class="count" id="aiTennis">…</span></div>
+      <div class="nav-item" data-sport="padel" onclick="toggleSportFilter(this)" id="navPadel"><span class="ico" style="color:var(--sport-padel);">●</span> PadelOutlet <span class="count" id="aiPadel">…</span></div>
+      <div class="nav-item" data-sport="pickleball" onclick="toggleSportFilter(this)" id="navPickle"><span class="ico" style="color:var(--sport-pickle);">●</span> PickleballOutlet <span class="count" id="aiPickle">…</span></div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Service</div>
+      <div class="nav-item" onclick="manualRefresh()"><span class="ico">🔄</span> Refresh now</div>
+      <div class="nav-item" onclick="toast('Audit log lives at /var/data/audit.jsonl','ok')"><span class="ico">📜</span> Audit log</div>
+      <div class="nav-item" onclick="toast('Insights — Phase 3','ok')"><span class="ico">📊</span> Insights</div>
+    </div>
+  </aside>
+
+  <section class="list-pane">
+    <div class="list-head">
+      <div class="list-title" id="listTitle">Inbox</div>
+      <div class="list-sub" id="listSub">Loading…</div>
+    </div>
+    <div class="list-filters" id="listFilters">
+      <span class="chip on" data-sport="all" onclick="onSportChip(this)">All sports</span>
+      <span class="chip" data-sport="tennis" onclick="onSportChip(this)"><span class="swatch" style="background:var(--sport-tennis);"></span>Tennis</span>
+      <span class="chip" data-sport="padel" onclick="onSportChip(this)"><span class="swatch" style="background:var(--sport-padel);"></span>Padel</span>
+      <span class="chip" data-sport="pickleball" onclick="onSportChip(this)"><span class="swatch" style="background:var(--sport-pickle);"></span>Pickleball</span>
+    </div>
+    <div class="conv-list" id="convList"></div>
+  </section>
+
+  <section class="detail" id="detailPane">
+    <div class="empty"><div class="icon">📬</div><h2>Pick a conversation</h2><p>Use <span class="kbd">j</span>/<span class="kbd">k</span> to navigate. Or click any item on the left.</p></div>
+  </section>
+</main>
+
+<div class="modal" id="takeoverModal">
+  <div class="modal-box">
+    <h3>Take over from AI?</h3>
+    <p>You'll be the only one talking to <b id="modalCustName">this customer</b> until you hand it back.</p>
+    <div class="checklist">
+      <div class="row">✓ Pause AI for this conversation</div>
+      <div class="row">✓ You become the assigned agent</div>
+      <div class="row">✓ Customer's bot widget shows the hold message</div>
+      <div class="row">✓ Audit log records the take-over</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeTakeover()">Cancel</button>
+      <button class="btn primary" id="confirmTakeoverBtn" onclick="confirmTakeover()">Take over</button>
+    </div>
   </div>
 </div>
 
-<div id="content" class="container"></div>
-<div id="empty" class="empty" style="display:none;">
-  No conversations match your filters yet. Once a customer chats with one of the bots, customer cards appear here within seconds.
-  <br /><br />
-  Quick test: <code>curl https://to-assistant-logs.onrender.com/debug/test?sport=tennis</code>
+<div class="cheatsheet" id="cheats" onclick="hideCheats(event)">
+  <div class="cheatsheet-box" onclick="event.stopPropagation()">
+    <h3>Keyboard shortcuts</h3>
+    <div class="cheatsheet-list">
+      <div class="cheatsheet-row"><span>Next conversation</span><span class="kbd">j</span></div>
+      <div class="cheatsheet-row"><span>Previous</span><span class="kbd">k</span></div>
+      <div class="cheatsheet-row"><span>Take over</span><span class="kbd">t</span></div>
+      <div class="cheatsheet-row"><span>Reply</span><span class="kbd">r</span></div>
+      <div class="cheatsheet-row"><span>Send reply</span><span class="kbd">⌘ ↵</span></div>
+      <div class="cheatsheet-row"><span>Refresh</span><span class="kbd">⌘ r</span></div>
+      <div class="cheatsheet-row"><span>Search</span><span class="kbd">/</span></div>
+      <div class="cheatsheet-row"><span>This menu</span><span class="kbd">?</span></div>
+      <div class="cheatsheet-row"><span>Theme</span><span class="kbd">⇧ d</span></div>
+      <div class="cheatsheet-row"><span>Hand back to AI</span><span class="kbd">h</span></div>
+    </div>
+  </div>
 </div>
 
-<footer>
-  TO Assistant Logs · in-memory ring buffer (last <span id="ft-max">5000</span>) ·
-  <a href="/api/health">/api/health</a>
-  <a href="/api/logs">/api/logs</a>
-  <a href="/debug/test">/debug/test</a>
-  · Zoho webhook: <code>POST /zoho</code>
-</footer>
+<div class="toast" id="toast"><span class="toast-dot"></span><span id="toastText"></span></div>
 
 <script>
-const $ = id => document.getElementById(id);
-const sportSel = $('sport'), sourceSel = $('source'), searchInp = $('search');
-const dateFrom = $('dateFrom'), dateTo = $('dateTo');
-const refreshBtn = $('refresh'), autoRefresh = $('autoRefresh');
-const content = $('content'), empty = $('empty');
-const vCustomer = $('vCustomer'), vFlat = $('vFlat'), vTable = $('vTable');
-const expandAll = $('expandAll'), collapseAll = $('collapseAll');
-let viewMode = 'customer';
-let collapsedSessions = new Set();
+/* =============================================================
+   OutletSupport v3 — wired to the to-assistant-logs backend
+   No build step. Vanilla JS. CSP-friendly (inline only).
+   ============================================================= */
 
-function fmtDate(iso) {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
-}
-function fmtTime(iso) {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-function fmtRelative(iso) {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  return `${Math.floor(diff/86400)}d ago`;
-}
-function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-function inDateRange(iso) {
-  if (!dateFrom.value && !dateTo.value) return true;
-  const t = new Date(iso).getTime();
-  if (dateFrom.value) {
-    const f = new Date(dateFrom.value + 'T00:00:00').getTime();
-    if (t < f) return false;
+const State = {
+  agent: null,
+  logs: [],                  // raw log entries
+  conversations: [],         // grouped by session_id
+  selectedSid: null,
+  aiState: { global:{}, perCustomer:{} },
+  notifications: [],         // unread alerts
+  notifSince: 0,
+  sportFilter: 'all',
+  inboxFilter: 'unclaimed',
+  search: '',
+  pollTimer: null,
+  pollErrors: 0,
+};
+
+/* ---------- API helpers ---------- */
+async function api(path, opts = {}) {
+  opts.credentials = 'include';
+  opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  const r = await fetch(path, opts);
+  if (r.status === 401) {
+    window.location.href = '/login';
+    throw new Error('unauthorized');
   }
-  if (dateTo.value) {
-    const tt = new Date(dateTo.value + 'T23:59:59').getTime();
-    if (t > tt) return false;
-  }
-  return true;
+  const txt = await r.text();
+  let body;
+  try { body = txt ? JSON.parse(txt) : {}; } catch { body = { raw: txt }; }
+  if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
+  return body;
 }
 
-// Group flat log array by session_id (or fall back to a synthetic key).
-// Returns array of { sessionId, sport, hasHuman, hasHandoff, firstAt, lastAt, turns: [...] }
-function groupBySession(logs) {
-  const groups = new Map();
-  for (const l of logs) {
-    let key = (l.session_id || '').trim();
-    if (!key) key = `_orphan_${l.id}`;  // each orphan becomes its own "customer" so they don't pile up
-    let g = groups.get(key);
-    if (!g) {
-      g = {
-        sessionId: key,
-        displayId: key.startsWith('_orphan_') ? '(no session)' : key,
-        sports: new Set(),
-        hasHuman: false,
-        hasHandoff: false,
-        firstAt: l.timestamp,
-        lastAt: l.timestamp,
-        turns: []
-      };
-      groups.set(key, g);
+/* ---------- Boot ---------- */
+async function boot() {
+  // restore theme
+  const t = localStorage.getItem('os.theme');
+  if (t) document.documentElement.dataset.theme = t;
+
+  try {
+    const me = await api('/api/me');
+    State.agent = me.agent || me;
+  } catch (e) {
+    return; // already redirected
+  }
+  document.getElementById('agentName').textContent = State.agent.agent_name || 'Agent';
+  const initial = (State.agent.agent_name || 'A')[0].toUpperCase();
+  document.getElementById('agentAvatar').textContent = initial;
+  document.getElementById('boot').style.display = 'none';
+
+  await refreshAll();
+  startPolling();
+}
+
+/* ---------- Data refresh ---------- */
+async function refreshAll() {
+  try {
+    const [logsRes, stateRes, notifRes] = await Promise.all([
+      api('/api/logs?limit=500'),
+      api('/api/state-all'),
+      api('/api/notifications?since=' + State.notifSince),
+    ]);
+    State.logs = logsRes.logs || [];
+    State.aiState = { global: stateRes.global || {}, perCustomer: stateRes.perCustomer || {} };
+    if (notifRes.notifications && notifRes.notifications.length) {
+      // append + de-dup
+      const seen = new Set(State.notifications.map(n => n.id));
+      for (const n of notifRes.notifications) if (!seen.has(n.id)) State.notifications.push(n);
+      State.notifSince = Math.max(State.notifSince, ...notifRes.notifications.map(n => n.id));
     }
-    g.sports.add(l.sport || 'unknown');
-    if (l.source === 'human') g.hasHuman = true;
-    if ((l.intent || '').includes('handoff') || (l.ai_response || '').includes('OPEN_HUMAN_CHAT')) g.hasHandoff = true;
-    if (new Date(l.timestamp) < new Date(g.firstAt)) g.firstAt = l.timestamp;
-    if (new Date(l.timestamp) > new Date(g.lastAt)) g.lastAt = l.timestamp;
-    g.turns.push(l);
+    State.notifications = State.notifications.filter(n => n.status !== 'read');
+    rebuildConversations();
+    render();
+    State.pollErrors = 0;
+  } catch (e) {
+    State.pollErrors++;
+    if (State.pollErrors === 1) toast('Network blip — retrying', 'err');
+    if (State.pollErrors === 5) toast('Backend unreachable', 'err');
   }
-  // Sort turns within each group oldest → newest (natural reading order)
-  for (const g of groups.values()) {
-    g.turns.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    g.primarySport = [...g.sports][0] || 'unknown';
-  }
-  // Customers ordered by most-recent activity
-  return [...groups.values()].sort((a, b) => new Date(b.lastAt) - new Date(a.lastAt));
 }
 
-function renderTurn(l, isFirstHumanTurn) {
-  const source = l.source || 'bot';
-  const showUser = (l.user_query || '').trim();
-  const showResp = (l.ai_response || '').trim();
-  const respLabel = source === 'human'
-    ? (l.agent_name ? `Human · ${esc(l.agent_name)}` : 'Human agent')
-    : 'AI bot';
-  const respClass = source === 'human' ? 'human' : 'bot';
-  const handoffBadge = (l.intent || '').includes('handoff') || (l.ai_response || '').includes('OPEN_HUMAN_CHAT')
-    ? '<span class="pill human" style="margin-left:6px;">→ Handoff</span>' : '';
-  return `
-    <div class="turn">
-      <div class="turn-meta">
-        <span class="time">${esc(fmtTime(l.timestamp))}</span>
-        <span>${esc(fmtDate(l.timestamp))}</span>
-        ${l.intent ? `<span class="intent">· ${esc(l.intent)}</span>` : ''}
-        ${l.endpoint ? `<span class="endpoint">· ${esc(l.endpoint)}</span>` : ''}
-        ${handoffBadge}
-        ${isFirstHumanTurn ? '<span class="pill human" style="margin-left:6px;">⮕ Live agent picked up</span>' : ''}
-      </div>
-      ${showUser ? `
-        <div class="bubble-row right">
-          <div>
-            <div class="bubble-label">Customer</div>
-            <div class="bubble user">${esc(showUser)}</div>
-          </div>
-        </div>` : ''}
-      ${showResp ? `
-        <div class="bubble-row">
-          <div>
-            <div class="bubble-label">${respLabel}</div>
-            <div class="bubble ${respClass}">${esc(showResp)}</div>
-          </div>
-        </div>` : ''}
-    </div>
-  `;
+function rebuildConversations() {
+  const byId = new Map();
+  for (const l of State.logs) {
+    const sid = l.session_id || '(none)';
+    if (!byId.has(sid)) {
+      byId.set(sid, {
+        session_id: sid,
+        sport: l.sport || 'unknown',
+        messages: [],
+        last_msg_at: 0,
+        has_human: false,
+        last_human_agent: null,
+      });
+    }
+    const c = byId.get(sid);
+    c.messages.push(l);
+    const ts = new Date(l.timestamp || l.received_at).getTime();
+    if (ts > c.last_msg_at) c.last_msg_at = ts;
+    if (l.source === 'human') { c.has_human = true; c.last_human_agent = l.agent_name || null; }
+  }
+  // Sort each conv's messages chronologically
+  for (const c of byId.values()) {
+    c.messages.sort((a,b) => new Date(a.timestamp||a.received_at) - new Date(b.timestamp||b.received_at));
+    c.last_msg = c.messages[c.messages.length - 1];
+  }
+  // Sort conversations: notifications first, then unclaimed (ai_off & no human yet), then by recency
+  State.conversations = Array.from(byId.values()).sort((a,b) => b.last_msg_at - a.last_msg_at);
 }
 
-function renderByCustomer(logs) {
-  const groups = groupBySession(logs);
-  if (!groups.length) return '';
-  const html = groups.map(g => {
-    const isCollapsed = collapsedSessions.has(g.sessionId);
-    let sawHumanFirst = false;
-    const turnsHtml = g.turns.map(t => {
-      const firstHuman = !sawHumanFirst && t.source === 'human';
-      if (firstHuman) sawHumanFirst = true;
-      return renderTurn(t, firstHuman);
+/* ---------- Derived helpers ---------- */
+function aiStatusFor(sid) {
+  const per = State.aiState.perCustomer || {};
+  if (per[sid] === 'off') return 'off';
+  // also off when global for that sport is off
+  const c = State.conversations.find(x => x.session_id === sid);
+  if (c && State.aiState.global && State.aiState.global[c.sport] === 'off') return 'off';
+  return 'on';
+}
+function statusFor(c) {
+  const ai = aiStatusFor(c.session_id);
+  const hasNotif = State.notifications.some(n => n.session_id === c.session_id);
+  if (ai === 'off' && c.has_human) return { kind: 'claimed', who: c.last_human_agent || 'Agent' };
+  if (ai === 'off' || hasNotif) return { kind: 'unclaimed' };
+  return { kind: 'ai' };
+}
+function priorityFor(c) {
+  const s = statusFor(c);
+  if (s.kind === 'unclaimed') {
+    const ageMin = (Date.now() - c.last_msg_at) / 60000;
+    if (ageMin > 10) return 1;
+    if (ageMin > 3)  return 2;
+    return 2;
+  }
+  return 3;
+}
+function customerLabel(c) {
+  const sid = c.session_id || '';
+  // try to find a phone or email pattern in any message
+  const blob = c.messages.map(m => m.user_query || '').join(' ');
+  const phone = blob.match(/\b[6-9]\d{9}\b/);
+  const email = blob.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+  if (phone) return phone[0];
+  if (email) return email[0];
+  // friendly suffix
+  return 'Customer …' + sid.slice(-6);
+}
+function ageLabel(ts) {
+  const m = Math.max(1, Math.floor((Date.now() - ts) / 60000));
+  if (m < 60) return m + ' min';
+  const h = Math.floor(m/60);
+  if (h < 24) return h + ' h';
+  return Math.floor(h/24) + ' d';
+}
+function applyFilters(list) {
+  return list.filter(c => {
+    if (State.sportFilter !== 'all' && c.sport !== State.sportFilter) return false;
+    const s = statusFor(c);
+    if (State.inboxFilter === 'unclaimed' && s.kind !== 'unclaimed') return false;
+    if (State.inboxFilter === 'mine' && !(s.kind === 'claimed' && (s.who || '').toLowerCase() === (State.agent.agent_name || '').toLowerCase())) return false;
+    if (State.search) {
+      const q = State.search.toLowerCase();
+      const blob = (c.messages.map(m => (m.user_query||'') + ' ' + (m.ai_response||'') + ' ' + (m.intent||'')).join(' ')).toLowerCase();
+      if (!blob.includes(q) && !c.session_id.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+/* ---------- Render ---------- */
+function render() {
+  // Sidebar counts
+  const all = State.conversations;
+  const unclaimed = all.filter(c => statusFor(c).kind === 'unclaimed').length;
+  const me = (State.agent.agent_name || '').toLowerCase();
+  const mine = all.filter(c => { const s = statusFor(c); return s.kind === 'claimed' && (s.who||'').toLowerCase() === me; }).length;
+  document.getElementById('cntUnclaimed').textContent = unclaimed;
+  document.getElementById('cntMine').textContent = mine;
+  document.getElementById('cntAll').textContent = all.length;
+  // Sidebar AI on/off badges
+  document.getElementById('aiTennis').textContent = State.aiState.global.tennis === 'off' ? 'OFF' : 'ON';
+  document.getElementById('aiPadel').textContent  = State.aiState.global.padel  === 'off' ? 'OFF' : 'ON';
+  document.getElementById('aiPickle').textContent = State.aiState.global.pickleball === 'off' ? 'OFF' : 'ON';
+  // Notif badge
+  const badge = document.getElementById('notifBadge');
+  if (unclaimed > 0) badge.classList.remove('zero'); else badge.classList.add('zero');
+  // Mark unclaimed nav red
+  document.getElementById('navUnclaimed').classList.toggle('urgent', unclaimed > 0);
+
+  // List
+  const filtered = applyFilters(all);
+  document.getElementById('listTitle').textContent =
+    State.inboxFilter === 'unclaimed' ? 'Unclaimed' :
+    State.inboxFilter === 'mine'      ? 'Mine' : 'All conversations';
+  document.getElementById('listSub').textContent =
+    `${filtered.length} of ${all.length}` + (State.search ? ` matching "${State.search}"` : '');
+  const root = document.getElementById('convList');
+  if (filtered.length === 0) {
+    root.innerHTML = `<div class="empty" style="padding:30px 20px;"><div class="icon">🌿</div><h2 style="font-size:16px;">All clear</h2><p style="font-size:12.5px;">No conversations match this filter. Customers will appear here when they need help.</p></div>`;
+  } else {
+    root.innerHTML = filtered.map(c => {
+      const s = statusFor(c);
+      const p = priorityFor(c);
+      const last = c.last_msg;
+      const snippet = (last && (last.user_query || last.ai_response) || '').replace(/\s+/g,' ').slice(0, 80);
+      const isSel = c.session_id === State.selectedSid;
+      const sportClass = ['tennis','padel','pickleball'].includes(c.sport) ? c.sport : '';
+      return `
+        <div class="conv ${isSel ? 'selected':''}" onclick="selectConv('${c.session_id}')">
+          <div class="conv-row1">
+            <span class="conv-prio p${p}"></span>
+            <span class="conv-name">${escapeHtml(customerLabel(c))}</span>
+            ${sportClass ? `<span class="conv-sport ${sportClass}">${c.sport}</span>` : ''}
+            <span class="conv-time">${ageLabel(c.last_msg_at)}</span>
+          </div>
+          <div class="conv-snippet">${escapeHtml(snippet)}</div>
+          <div class="conv-meta">
+            <span class="conv-status ${s.kind}">${s.kind === 'unclaimed' ? 'NEEDS AGENT' : s.kind === 'claimed' ? (s.who + ' is in') : 'AI'}</span>
+          </div>
+        </div>`;
     }).join('');
-    const sportPills = [...g.sports].map(s => `<span class="pill ${esc(s)}">${esc(s)}</span>`).join(' ');
-    const sourcePills = (g.hasHuman ? '<span class="pill human">Human handoff</span>' : '<span class="pill bot">AI only</span>');
+  }
 
-    // Per-customer AI toggle state — stored in window.__perCustomer (loaded from /api/state-all)
-    const customerState = (window.__perCustomer && window.__perCustomer[g.sessionId]) || null;
-    const sport = g.primarySport;
-    const globalState = (window.__globalState && window.__globalState[sport]) || 'on';
-    const effectiveOn = customerState !== null ? customerState === 'on' : globalState === 'on';
-    const stateLabel = customerState
-      ? `${customerState.toUpperCase()} (per-customer)`
-      : `${globalState.toUpperCase()} (from ${sport})`;
-
-    // Alert: this session has an unread "talk to human" notification
-    const hasAlert = (window.__alertSessions || new Set()).has(g.sessionId);
-    const alertBanner = hasAlert
-      ? `<div class="alert-banner">🚨 Customer is waiting for a human agent — type your reply below</div>`
-      : '';
-
-    // Don't show reply box for orphan sessions (no real session_id to deliver to)
-    const isOrphan = g.sessionId.startsWith('_orphan_');
-    const replyBox = isOrphan ? '' : `
-      <div class="reply-box">
-        <textarea id="reply-${esc(g.sessionId)}" placeholder="Type your reply as a human agent…" rows="2"
-          onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendHumanReply('${esc(g.sessionId)}','${esc(sport)}');}"></textarea>
-        <button class="send-btn" onclick="sendHumanReply('${esc(g.sessionId)}','${esc(sport)}')">Send</button>
-      </div>
-      <div class="reply-hint">Press Enter to send · Shift+Enter for newline · Customer sees reply within ~2s</div>
-    `;
-
-    return `
-      <div class="customer-card ${isCollapsed ? 'collapsed' : ''} ${g.hasHandoff ? 'has-handoff' : ''} ${g.hasHuman ? 'has-human' : ''} ${hasAlert ? 'alert' : ''}" data-session="${esc(g.sessionId)}">
-        <div class="customer-header">
-          <span class="chevron" onclick="toggleSession('${esc(g.sessionId)}'); event.stopPropagation();">▼</span>
-          ${sportPills}
-          ${sourcePills}
-          <span class="customer-id" onclick="toggleSession('${esc(g.sessionId)}')">${esc(g.displayId.slice(0, 32))}${g.displayId.length > 32 ? '…' : ''}</span>
-          ${isOrphan ? '' : `<label class="toggle ${effectiveOn ? 'on' : ''}" onclick="event.stopPropagation();" title="${esc(stateLabel)}">
-            <span class="toggle-track" onclick="toggleCustomerAi('${esc(g.sessionId)}', this); event.stopPropagation();"></span>
-            <span class="toggle-label">AI ${effectiveOn ? 'ON' : 'OFF'}</span>
-          </label>`}
-          <span class="customer-meta" onclick="toggleSession('${esc(g.sessionId)}')">
-            <span class="turn-count">${g.turns.length} message${g.turns.length === 1 ? '' : 's'}</span>
-            <span class="sep">·</span>
-            <span>${esc(fmtDate(g.firstAt))} ${esc(fmtTime(g.firstAt))}</span>
-            <span class="sep">·</span>
-            <span>last ${esc(fmtRelative(g.lastAt))}</span>
-          </span>
-        </div>
-        <div class="customer-body">
-          ${alertBanner}
-          ${turnsHtml}
-          ${replyBox}
-        </div>
-      </div>
-    `;
-  }).join('');
-  return `<div class="section-title">${groups.length} customer${groups.length === 1 ? '' : 's'} (most recent first)</div>${html}`;
+  renderDetail();
 }
 
-function renderFlat(logs) {
-  // newest first across all conversations
-  const sorted = [...logs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  if (!sorted.length) return '';
-  return `<div class="section-title">${sorted.length} message${sorted.length === 1 ? '' : 's'} (newest first)</div>` +
-    sorted.map(l => `
-      <div class="customer-card">
-        <div class="customer-body">
-          ${renderTurn(l, false)}
-          <div class="turn-meta" style="margin-top:6px;">
-            <span class="pill ${esc(l.sport || 'unknown')}">${esc(l.sport || 'unknown')}</span>
-            <span class="pill ${l.source === 'human' ? 'human' : 'bot'}">${l.source === 'human' ? 'Human' : 'AI'}</span>
-            ${l.session_id ? `<span class="endpoint">· session: ${esc(l.session_id.slice(0, 24))}</span>` : ''}
+function renderDetail() {
+  const root = document.getElementById('detailPane');
+  if (!State.selectedSid) {
+    root.innerHTML = `<div class="empty"><div class="icon">📬</div><h2>Pick a conversation</h2><p>Use <span class="kbd">j</span>/<span class="kbd">k</span> to navigate. Or click any item on the left.</p></div>`;
+    return;
+  }
+  const c = State.conversations.find(x => x.session_id === State.selectedSid);
+  if (!c) {
+    root.innerHTML = `<div class="empty"><div class="icon">🔍</div><h2>Conversation not in current view</h2><p>It may have moved out of the active filter. Switch to "All" to find it.</p></div>`;
+    return;
+  }
+  const s = statusFor(c);
+  const ai = aiStatusFor(c.session_id);
+  const sportClass = ['tennis','padel','pickleball'].includes(c.sport) ? c.sport : '';
+  const me = (State.agent.agent_name || '').toLowerCase();
+  const isMine = s.kind === 'claimed' && (s.who||'').toLowerCase() === me;
+  const replyDisabled = !isMine && s.kind !== 'unclaimed';
+  const canTake = s.kind === 'unclaimed';
+  const canHandBack = isMine;
+
+  root.innerHTML = `
+    <div class="thread-col">
+      <div class="thread-head">
+        <div class="avatar" style="background:linear-gradient(135deg,#f97316,#ef4444);width:36px;height:36px;font-size:14px;">${escapeHtml(customerLabel(c)[0] || '·')}</div>
+        <div class="who">
+          <div class="who-name">${escapeHtml(customerLabel(c))} ${sportClass ? `<span class="conv-sport ${sportClass}" style="margin-left:6px;font-size:10px;">${c.sport}</span>` : ''}</div>
+          <div class="who-meta">session ${escapeHtml(c.session_id)} · ${c.messages.length} msgs · started ${ageLabel(c.last_msg_at)} ago</div>
+        </div>
+        <div class="actions">
+          ${canTake ? `<button class="btn primary" onclick="openTakeover()">⚡ Take over</button>` : ''}
+          ${canHandBack ? `<button class="btn danger" onclick="handBack()">↩️ Hand back to AI</button>` : ''}
+          ${!canTake && !canHandBack && s.kind === 'claimed' ? `<span class="btn" style="background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.3);color:#10b981;cursor:default;">${escapeHtml(s.who)} is talking</span>` : ''}
+          ${!canTake && !canHandBack && s.kind === 'ai' ? `<span class="btn" style="cursor:default;color:var(--text-muted);">AI is handling</span>` : ''}
+        </div>
+      </div>
+
+      <div class="thread" id="threadBody">
+        ${c.messages.map(m => msgHtml(m)).join('')}
+      </div>
+
+      <div class="reply-box">
+        <div class="reply-toolbar">
+          <span class="reply-tool" onclick="toast('Canned-replies — Phase 2','ok')">⚡ Canned <span class="kbd">⌘/</span></span>
+          <span class="reply-tool ai" onclick="toast('AI draft — Phase 2 (needs bot endpoint)','ok')">✨ AI draft <span class="kbd">⌘⇧A</span></span>
+          <span style="margin-left:auto;font-size:11px;color:var(--text-soft);">${replyDisabled ? 'Take over first to reply' : `Replying as ${escapeHtml(State.agent.agent_name)}`}</span>
+        </div>
+        <div class="reply-input">
+          <textarea id="replyText" placeholder="Type your reply…&#10;Tip: Markdown supported. ⌘+Enter to send." ${replyDisabled ? 'disabled':''}></textarea>
+          <div class="send-row">
+            <button class="btn primary" id="sendBtn" onclick="sendReply()" ${replyDisabled ? 'disabled':''}>Send <span class="kbd" style="font-size:10px;opacity:.7;margin-left:4px;">⌘↵</span></button>
           </div>
         </div>
       </div>
-    `).join('');
+    </div>
+
+    <aside class="c360">
+      <div class="field">
+        <h3>Customer</h3>
+        <div class="v">${escapeHtml(customerLabel(c))}</div>
+        <div class="v-sub">Session: ${escapeHtml(c.session_id.slice(0, 24))}${c.session_id.length>24?'…':''}</div>
+        <div class="v-sub">${c.messages.length} messages · ${[...new Set(c.messages.map(m => m.intent).filter(Boolean))].length} intents</div>
+      </div>
+
+      <div class="field">
+        <h3>Sport · Store</h3>
+        <div class="v">${escapeHtml(c.sport)}</div>
+        <div class="v-sub">Global AI: <b>${(State.aiState.global[c.sport] || 'on').toUpperCase()}</b></div>
+        <div class="v-sub">This conversation AI: <b style="color:${ai==='off'?'#ef4444':'#10b981'};">${ai.toUpperCase()}</b></div>
+      </div>
+
+      <div class="field">
+        <h3>Recent intents</h3>
+        ${[...new Set(c.messages.map(m => m.intent).filter(Boolean))].slice(-5).reverse().map(i => `
+          <div class="v-sub" style="display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 8px;margin:2px 2px 2px 0;font-size:11px;">${escapeHtml(i)}</div>
+        `).join('') || '<div class="v-sub" style="font-style:italic;">none</div>'}
+      </div>
+
+      <div class="field">
+        <h3>Magento orders</h3>
+        <div class="v-sub" style="font-style:italic;padding:8px 10px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;">Magento lookup — Phase 2 (needs server-side proxy)</div>
+      </div>
+
+      <div class="field">
+        <h3>Notes</h3>
+        <div class="v-sub" style="font-style:italic;padding:8px 10px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;">Internal notes — Phase 2</div>
+      </div>
+    </aside>
+  `;
+  // Auto-scroll thread to bottom
+  const tb = document.getElementById('threadBody');
+  if (tb) tb.scrollTop = tb.scrollHeight;
+  // Ack any unread notifications for this session
+  const unreadIds = State.notifications.filter(n => n.session_id === c.session_id && n.status !== 'read').map(n => n.id);
+  if (unreadIds.length) ackNotifications(unreadIds);
 }
 
-function renderTable(logs) {
-  const sorted = [...logs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  const head = `<table style="width:100%;border-collapse:collapse;font-size:13px;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
-    <thead><tr>
-      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:110px;">Date</th>
-      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:90px;">Time</th>
-      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:80px;">Sport</th>
-      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:80px;">Source</th>
-      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);width:140px;">Customer</th>
-      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);">Query</th>
-      <th style="text-align:left;padding:10px 8px;color:var(--muted);text-transform:uppercase;font-size:11px;border-bottom:1px solid var(--border);">Reply</th>
-    </tr></thead><tbody>`;
-  const rows = sorted.map(l => {
-    const source = l.source || 'bot';
-    return `<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:10px 8px;vertical-align:top;color:var(--text);font-variant-numeric:tabular-nums;font-size:12px;">${esc(fmtDate(l.timestamp))}</td>
-      <td style="padding:10px 8px;vertical-align:top;color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px;">${esc(fmtTime(l.timestamp))}</td>
-      <td style="padding:10px 8px;vertical-align:top;"><span class="pill ${esc(l.sport||'unknown')}">${esc(l.sport||'unknown')}</span></td>
-      <td style="padding:10px 8px;vertical-align:top;"><span class="pill ${esc(source==='human'?'human':'bot')}">${esc(source==='human'?'Human':'AI')}</span></td>
-      <td style="padding:10px 8px;vertical-align:top;font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);">${esc((l.session_id||'').slice(0, 16))}</td>
-      <td style="padding:10px 8px;vertical-align:top;max-width:300px;white-space:pre-wrap;word-wrap:break-word;">${esc((l.user_query||'').slice(0, 240))}</td>
-      <td style="padding:10px 8px;vertical-align:top;color:var(--muted);max-width:380px;white-space:pre-wrap;word-wrap:break-word;">${esc((l.ai_response||'').slice(0, 400))}</td>
-    </tr>`;
-  }).join('');
-  return head + rows + `</tbody></table>`;
+function msgHtml(m) {
+  const src = m.source || 'bot';
+  const grp = src === 'bot' ? 'bot' : (src === 'human' ? 'human' : 'cust');
+  const who = src === 'bot' ? 'AI' : (src === 'human' ? (m.agent_name || 'Agent') : 'Customer');
+  const text = src === 'bot' ? (m.ai_response || '(empty)') :
+               src === 'human' ? (m.ai_response || '(empty)') :
+               (m.user_query || '(empty)');
+  const t = m.timestamp ? new Date(m.timestamp).toTimeString().slice(0,5) : '';
+  const sc = m.intent && /short_circuit|warehouse|cross_store_info|cross_sport_redirect|support_contact|upgrade_program|order_handoff/.test(m.intent);
+  return `
+    <div class="msg-group ${grp}">
+      <div class="msg-meta">
+        <span class="source-badge ${grp}">${escapeHtml(who)}</span>
+        <span>${t}</span>
+        ${m.intent ? `<span style="color:var(--text-soft);font-size:11px;">intent: ${escapeHtml(m.intent)}</span>` : ''}
+        ${sc ? `<span class="short-circuit-tag">deterministic</span>` : ''}
+      </div>
+      <div class="bubble">${escapeHtml(text)}</div>
+    </div>`;
 }
 
-function toggleSession(sessionId) {
-  if (collapsedSessions.has(sessionId)) collapsedSessions.delete(sessionId);
-  else collapsedSessions.add(sessionId);
-  load();
+/* ---------- Actions ---------- */
+function selectConv(sid) {
+  State.selectedSid = sid;
+  render();
 }
-window.toggleSession = toggleSession;
-
-// ===== AI toggle + handoff state =====
-window.__globalState = { tennis: 'on', padel: 'on', pickleball: 'on' };
-window.__perCustomer = {};
-window.__alertSessions = new Set();
-window.__lastNotificationId = 0;
-window.__suppressSound = true;  // suppress sound on first poll (initial load)
-setTimeout(() => { window.__suppressSound = false; }, 2500);
-
-async function loadAiState() {
-  try {
-    const r = await fetch('/api/state-all');
-    const d = await r.json();
-    window.__globalState = d.global || window.__globalState;
-    window.__perCustomer = d.perCustomer || {};
-    // Update header toggles
-    document.querySelectorAll('.global-toggles .toggle').forEach(el => {
-      const sport = el.dataset.sport;
-      const isOn = (window.__globalState[sport] || 'on') === 'on';
-      el.classList.toggle('on', isOn);
-      const label = el.querySelector('[data-state]');
-      if (label) label.textContent = isOn ? 'ON' : 'OFF';
-    });
-  } catch (e) { /* silent */ }
+function setFilter(el) {
+  document.querySelectorAll('.sidebar .nav-item[data-filter]').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  State.inboxFilter = el.dataset.filter;
+  render();
 }
-
-async function pollNotifications() {
-  try {
-    const r = await fetch('/api/notifications?since=' + window.__lastNotificationId);
-    const d = await r.json();
-    if (d.notifications && d.notifications.length) {
-      const newAlerts = [];
-      for (const n of d.notifications) {
-        if (n.id > window.__lastNotificationId) window.__lastNotificationId = n.id;
-        if (n.status === 'unread') {
-          window.__alertSessions.add(n.session_id);
-          newAlerts.push(n);
-        }
-      }
-      if (newAlerts.length && !window.__suppressSound) playNotificationSound();
-      if (newAlerts.length) load();  // re-render to show alerts
-    }
-    // Update header badge
-    const badge = document.getElementById('notif-badge');
-    if (badge) {
-      if (d.unread_count > 0) {
-        badge.textContent = `🔴 ${d.unread_count} waiting`;
-        badge.classList.remove('zero');
-      } else {
-        badge.textContent = '0 waiting';
-        badge.classList.add('zero');
-      }
-    }
-  } catch (e) { /* silent */ }
+function onSportChip(el) {
+  document.querySelectorAll('.list-filters .chip').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+  State.sportFilter = el.dataset.sport;
+  render();
 }
-
-function playNotificationSound() {
-  try {
-    // Web Audio: short bell-like tone (no external file needed, robust against blocked autoplay)
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.setValueAtTime(1320, ctx.currentTime + 0.12);
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.45);
-  } catch (e) { /* sound is nice-to-have */ }
+function toggleSportFilter(el) {
+  // Click on a sport in sidebar = toggle global AI for that sport
+  const sport = el.dataset.sport;
+  const cur = State.aiState.global[sport] === 'off' ? 'off' : 'on';
+  const next = cur === 'on' ? 'off' : 'on';
+  if (!confirm(`Turn ${next.toUpperCase()} AI globally for ${sport}? This affects ALL conversations on that store.`)) return;
+  api('/api/toggle', { method:'POST', body: JSON.stringify({ scope:'global', id: sport, value: next })})
+    .then(() => { State.aiState.global[sport] = next; render(); toast(`AI ${next.toUpperCase()} for ${sport}`, 'ok'); })
+    .catch(e => toast('Toggle failed: '+e.message, 'err'));
 }
-
-// Per-customer AI toggle
-async function toggleCustomerAi(sessionId, trackEl) {
-  const card = trackEl.closest('.customer-card');
-  const toggleEl = trackEl.closest('.toggle');
-  const currentlyOn = toggleEl.classList.contains('on');
-  const newValue = currentlyOn ? 'off' : 'on';
-  // Optimistic update
-  toggleEl.classList.toggle('on', !currentlyOn);
-  toggleEl.querySelector('.toggle-label').textContent = `AI ${newValue.toUpperCase()}`;
-  try {
-    await fetch('/api/toggle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope: 'session', id: sessionId, value: newValue })
-    });
-    window.__perCustomer[sessionId] = newValue;
-    // Acknowledge any alerts for this session — operator is now on it
-    if (newValue === 'off') {
-      window.__alertSessions.delete(sessionId);
-      ackAlertsForSession(sessionId);
-      card.classList.remove('alert');
-    }
-  } catch (e) {
-    // Revert on failure
-    toggleEl.classList.toggle('on', currentlyOn);
-    toggleEl.querySelector('.toggle-label').textContent = `AI ${currentlyOn ? 'ON' : 'OFF'}`;
-  }
+function onSearchInput(v) {
+  State.search = v.trim();
+  render();
 }
-window.toggleCustomerAi = toggleCustomerAi;
-
-// Global per-sport AI toggle
-async function toggleGlobalAi(sport, toggleEl) {
-  const currentlyOn = toggleEl.classList.contains('on');
-  const newValue = currentlyOn ? 'off' : 'on';
-  toggleEl.classList.toggle('on', !currentlyOn);
-  toggleEl.querySelector('[data-state]').textContent = newValue.toUpperCase();
-  try {
-    await fetch('/api/toggle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope: 'global', id: sport, value: newValue })
-    });
-    window.__globalState[sport] = newValue;
-    load();  // re-render cards (effective state may change)
-  } catch (e) {
-    toggleEl.classList.toggle('on', currentlyOn);
-    toggleEl.querySelector('[data-state]').textContent = currentlyOn ? 'ON' : 'OFF';
-  }
+function manualRefresh() {
+  refreshAll().then(() => toast('Refreshed', 'ok'));
 }
-window.toggleGlobalAi = toggleGlobalAi;
-
-// Wire up the global-toggles labels
-document.querySelectorAll('.global-toggles .toggle').forEach(el => {
-  el.addEventListener('click', () => toggleGlobalAi(el.dataset.sport, el));
-});
-
-// Send a human reply
-async function sendHumanReply(sessionId, sport) {
-  const ta = document.getElementById('reply-' + sessionId);
-  if (!ta) return;
-  const text = ta.value.trim();
-  if (!text) return;
-  const btn = ta.parentElement.querySelector('.send-btn');
+function openTakeover() {
+  const c = State.conversations.find(x => x.session_id === State.selectedSid);
+  if (!c) return;
+  document.getElementById('modalCustName').textContent = customerLabel(c);
+  document.getElementById('takeoverModal').classList.add('show');
+}
+function closeTakeover() { document.getElementById('takeoverModal').classList.remove('show'); }
+async function confirmTakeover() {
+  const sid = State.selectedSid;
+  if (!sid) return;
+  const btn = document.getElementById('confirmTakeoverBtn');
   btn.disabled = true;
   try {
-    const r = await fetch('/api/human-message', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionId,
-        text,
-        // agent_name comes from server session (auth'd) — body field ignored, prevents impersonation
-        sport
-      })
-    });
-    const d = await r.json();
-    if (d.ok) {
-      ta.value = '';
-      // Acknowledge alert and remove the red border
-      window.__alertSessions.delete(sessionId);
-      ackAlertsForSession(sessionId);
-      // If AI was on for this session, auto-flip it off (operator is taking over)
-      if ((window.__perCustomer[sessionId] || (window.__globalState[sport] === 'on' ? 'on' : 'off')) === 'on') {
-        await fetch('/api/toggle', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ scope: 'session', id: sessionId, value: 'off' })
-        });
-        window.__perCustomer[sessionId] = 'off';
-      }
-      load();  // refresh to show the new turn
-    }
+    await api('/api/toggle', { method:'POST', body: JSON.stringify({ scope:'session', id: sid, value:'off' })});
+    State.aiState.perCustomer[sid] = 'off';
+    closeTakeover();
+    toast('You are now talking to this customer', 'ok');
+    await refreshAll();
   } catch (e) {
-    alert('Failed to send: ' + e.message);
+    toast('Take-over failed: '+e.message, 'err');
   } finally {
     btn.disabled = false;
   }
 }
-window.sendHumanReply = sendHumanReply;
-
-async function ackAlertsForSession(sessionId) {
-  // Find unread notifs for this session and ack them
+async function handBack() {
+  const sid = State.selectedSid;
+  if (!sid) return;
+  if (!confirm('Hand control back to AI for this customer?')) return;
   try {
-    const r = await fetch('/api/notifications?since=0');
-    const d = await r.json();
-    const ids = (d.notifications || [])
-      .filter(n => n.session_id === sessionId && n.status === 'unread')
-      .map(n => n.id);
-    if (ids.length) {
-      await fetch('/api/notifications/ack', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids })
-      });
-    }
-  } catch (e) { /* silent */ }
-}
-
-async function load() {
-  const params = new URLSearchParams();
-  if (sportSel.value) params.set('sport', sportSel.value);
-  if (searchInp.value.trim()) params.set('q', searchInp.value.trim());
-  params.set('limit', 2000);
-  try {
-    const r = await fetch('/api/logs?' + params.toString());
-    const d = await r.json();
-    let logs = d.logs;
-    // Apply client-side filters
-    if (sourceSel.value === 'bot') logs = logs.filter(l => (l.source || 'bot') === 'bot');
-    if (sourceSel.value === 'human') {
-      // "Has human handoff" — show all turns of any session where ANY turn was human
-      const humanSessions = new Set(logs.filter(l => l.source === 'human').map(l => l.session_id || ''));
-      logs = logs.filter(l => humanSessions.has(l.session_id || ''));
-    }
-    logs = logs.filter(l => inDateRange(l.timestamp));
-
-    // Update header stats
-    $('stat-total').textContent = d.total_received.toLocaleString();
-    const customerCount = new Set(logs.map(l => l.session_id || `_o_${l.id}`)).size;
-    $('stat-customers').textContent = customerCount.toLocaleString();
-
-    if (!logs.length) {
-      content.innerHTML = '';
-      empty.style.display = '';
-      return;
-    }
-    empty.style.display = 'none';
-    if (viewMode === 'customer') content.innerHTML = renderByCustomer(logs);
-    else if (viewMode === 'flat') content.innerHTML = renderFlat(logs);
-    else content.innerHTML = renderTable(logs);
-  } catch (err) {
-    content.innerHTML = `<div class="empty" style="color:#ff6b6b;">Failed to load logs: ${esc(err.message)}</div>`;
+    await api('/api/toggle', { method:'POST', body: JSON.stringify({ scope:'session', id: sid, value:'on' })});
+    State.aiState.perCustomer[sid] = 'on';
+    toast('AI is back on for this customer', 'ok');
+    await refreshAll();
+  } catch (e) {
+    toast('Hand-back failed: '+e.message, 'err');
   }
 }
-
-let timer = null;
-function startTimer() {
-  stopTimer();
-  if (autoRefresh.checked) {
-    timer = setInterval(() => { load(); loadAiState(); pollNotifications(); }, 5000);
+async function sendReply() {
+  const ta = document.getElementById('replyText');
+  const text = (ta.value || '').trim();
+  if (!text) return toast('Reply is empty', 'err');
+  const c = State.conversations.find(x => x.session_id === State.selectedSid);
+  if (!c) return;
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true;
+  try {
+    await api('/api/human-message', { method:'POST', body: JSON.stringify({ session_id: c.session_id, sport: c.sport, text })});
+    ta.value = '';
+    toast('Sent', 'ok');
+    await refreshAll();
+  } catch (e) {
+    toast('Send failed: '+e.message, 'err');
+  } finally {
+    btn.disabled = false;
   }
 }
-function stopTimer() { if (timer) clearInterval(timer); timer = null; }
-
-refreshBtn.addEventListener('click', load);
-autoRefresh.addEventListener('change', () => autoRefresh.checked ? startTimer() : stopTimer());
-[sportSel, sourceSel, dateFrom, dateTo].forEach(el => el.addEventListener('change', load));
-let searchT = null;
-searchInp.addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(load, 300); });
-
-vCustomer.addEventListener('click', () => { viewMode = 'customer'; vCustomer.classList.add('active'); vFlat.classList.remove('active'); vTable.classList.remove('active'); load(); });
-vFlat.addEventListener('click', () => { viewMode = 'flat'; vFlat.classList.add('active'); vCustomer.classList.remove('active'); vTable.classList.remove('active'); load(); });
-vTable.addEventListener('click', () => { viewMode = 'table'; vTable.classList.add('active'); vCustomer.classList.remove('active'); vFlat.classList.remove('active'); load(); });
-
-expandAll.addEventListener('click', () => { collapsedSessions.clear(); load(); });
-collapseAll.addEventListener('click', () => {
-  document.querySelectorAll('.customer-card[data-session]').forEach(el => collapsedSessions.add(el.dataset.session));
-  load();
-});
-
-fetch('/api/health').then(r => r.json()).then(d => { $('ft-max').textContent = (d.max_entries || 5000).toLocaleString(); });
-
-// ===== AUTH: bootstrap agent info + global 401 handler =====
-const _origFetch2 = window.fetch;
-window.fetch = function(input, init) {
-  const opts = init || {};
-  if (!('credentials' in opts)) opts.credentials = 'same-origin';
-  return _origFetch2(input, opts).then(resp => {
-    // If any dashboard call returns 401, the session expired — redirect to login.
-    if (resp.status === 401 && typeof input === 'string' && input.startsWith('/api/') && !input.startsWith('/api/login')) {
-      window.location.href = '/login';
-    }
-    return resp;
-  });
-};
-
-async function bootstrapAuth() {
+async function ackNotifications(ids) {
   try {
-    const r = await fetch('/api/me');
-    if (!r.ok) { window.location.href = '/login'; return; }
-    const d = await r.json();
-    const el = document.getElementById('agent-name');
-    if (el) el.textContent = d.agent_name || 'Agent';
-  } catch (e) { window.location.href = '/login'; }
+    await api('/api/notifications/ack', { method:'POST', body: JSON.stringify({ ids })});
+    State.notifications = State.notifications.map(n => ids.includes(n.id) ? Object.assign({},n,{status:'read'}) : n).filter(n => n.status !== 'read');
+    render();
+  } catch (e) {/* silent */}
 }
-document.getElementById('logout-btn').addEventListener('click', async () => {
-  try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+function onNotifClick() {
+  // jump to oldest unread notification's session
+  const u = State.notifications.find(n => n.status !== 'read');
+  if (!u) return toast('No unread alerts', 'ok');
+  State.selectedSid = u.session_id;
+  State.inboxFilter = 'unclaimed';
+  render();
+}
+async function logout(e) {
+  if (e) e.preventDefault();
+  await api('/api/logout', { method:'POST' }).catch(() => {});
   window.location.href = '/login';
+}
+
+/* ---------- Theme ---------- */
+function toggleTheme() {
+  const cur = document.documentElement.dataset.theme;
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem('os.theme', next);
+  toast('Theme: '+next, 'ok');
+}
+
+/* ---------- Cheatsheet + toast ---------- */
+function showCheats() { document.getElementById('cheats').classList.add('show'); }
+function hideCheats(e) { if (e.target.id === 'cheats') document.getElementById('cheats').classList.remove('show'); }
+let toastTimer = null;
+function toast(msg, kind) {
+  const el = document.getElementById('toast');
+  el.classList.remove('err','ok');
+  if (kind) el.classList.add(kind);
+  document.getElementById('toastText').textContent = msg;
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+/* ---------- Polling ---------- */
+function startPolling() {
+  if (State.pollTimer) clearInterval(State.pollTimer);
+  State.pollTimer = setInterval(() => refreshAll(), 5000);
+}
+
+/* ---------- Keyboard ---------- */
+document.addEventListener('keydown', (e) => {
+  const inField = e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT';
+  if (inField) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      sendReply();
+    } else if (e.key === 'Escape') {
+      e.target.blur();
+    }
+    return;
+  }
+  if (e.key === '?') { e.preventDefault(); showCheats(); }
+  else if (e.key === '/') { e.preventDefault(); document.getElementById('globalSearch').focus(); }
+  else if (e.key === 'j') {
+    const list = applyFilters(State.conversations);
+    if (!list.length) return;
+    const i = list.findIndex(c => c.session_id === State.selectedSid);
+    selectConv(list[(i + 1) % list.length].session_id);
+  } else if (e.key === 'k') {
+    const list = applyFilters(State.conversations);
+    if (!list.length) return;
+    const i = list.findIndex(c => c.session_id === State.selectedSid);
+    selectConv(list[(i - 1 + list.length) % list.length].session_id);
+  } else if (e.key === 't') {
+    const c = State.conversations.find(x => x.session_id === State.selectedSid);
+    if (!c) return;
+    if (statusFor(c).kind === 'unclaimed') openTakeover();
+    else toast('Already in this chat or AI is handling', 'ok');
+  } else if (e.key === 'h') {
+    handBack();
+  } else if (e.key === 'r') {
+    const ta = document.getElementById('replyText');
+    if (ta && !ta.disabled) ta.focus();
+  } else if (e.key === 'D' && e.shiftKey) toggleTheme();
+  else if (e.key === 'r' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); manualRefresh(); }
 });
 
-window.load = load;
-bootstrapAuth();  // sets agent name in header, redirects if not auth'd
-loadAiState();
-pollNotifications();
-load();
-startTimer();
+/* ---------- Util ---------- */
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+boot();
 </script>
 </body>
 </html>
