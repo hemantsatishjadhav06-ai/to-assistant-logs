@@ -543,6 +543,12 @@ function render() {
 
 function renderDetail() {
   const root = document.getElementById('detailPane');
+  // v4.1: remember thread scroll BEFORE the 5s auto-refresh rebuilds the DOM,
+  // so agents reading history aren't yanked back to the bottom.
+  const _prevTb = document.getElementById('threadBody');
+  const _wasAtBottom = _prevTb ? (_prevTb.scrollHeight - _prevTb.scrollTop - _prevTb.clientHeight < 48) : true;
+  const _prevScroll = _prevTb ? _prevTb.scrollTop : 0;
+  const _sameConv = (State._renderedSid === State.selectedSid);
   if (!State.selectedSid) {
     root.innerHTML = `<div class="empty"><div class="icon">📬</div><h2>Pick a conversation</h2><p>Use <span class="kbd">j</span>/<span class="kbd">k</span> to navigate. Or click any item on the left.</p></div>`;
     return;
@@ -633,9 +639,14 @@ function renderDetail() {
       </div>
     </aside>
   `;
-  // Auto-scroll thread to bottom
+  // v4.1: jump to bottom only on first open of a conversation or when already at the
+  // bottom (new message). Otherwise keep the agent's place in the history.
   const tb = document.getElementById('threadBody');
-  if (tb) tb.scrollTop = tb.scrollHeight;
+  if (tb) {
+    if (!_sameConv || _wasAtBottom) tb.scrollTop = tb.scrollHeight;
+    else tb.scrollTop = _prevScroll;
+  }
+  State._renderedSid = State.selectedSid;
   // Ack any unread notifications for this session
   const unreadIds = State.notifications.filter(n => n.session_id === c.session_id && n.status !== 'read').map(n => n.id);
   if (unreadIds.length) ackNotifications(unreadIds);
