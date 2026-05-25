@@ -372,6 +372,8 @@ app.post('/log', botRateLimit(300), requireBot, (req, res) => {
       timestamp: String(b.timestamp || new Date().toISOString()),
       sport: String(b.sport || 'unknown').toLowerCase(),
       session_id: String(b.session_id || ''),
+      customer_name: String(b.customer_name || '').slice(0, 120),
+      customer_email: String(b.customer_email || '').slice(0, 200),
       user_query: String(b.user_query || '').slice(0, 4000),
       ai_response: String(b.ai_response || '').slice(0, 8000),
       intent: String(b.intent || ''),
@@ -421,6 +423,8 @@ app.post('/zoho', (req, res) => {
       timestamp: String(b.timestamp || b.event_time || b.created_at || new Date().toISOString()),
       sport,
       session_id: sessionId,
+      customer_name: String((visitor && visitor.name) || b.visitor_name || '').slice(0, 120),
+      customer_email: String((visitor && visitor.email) || b.visitor_email || b.email || '').slice(0, 200),
       user_query: String(userText || '').slice(0, 4000),
       ai_response: String(agentText || '').slice(0, 8000),  // for human responses
       intent: String(b.event || b.event_type || 'zoho_chat'),
@@ -451,7 +455,9 @@ app.get('/api/logs', requireAgent, (req, res) => {
       l.user_query.toLowerCase().includes(q) ||
       l.ai_response.toLowerCase().includes(q) ||
       l.intent.toLowerCase().includes(q) ||
-      l.session_id.toLowerCase().includes(q)
+      l.session_id.toLowerCase().includes(q) ||
+      (l.customer_name||'').toLowerCase().includes(q) ||
+      (l.customer_email||'').toLowerCase().includes(q)
     );
   }
   const slice = filtered.slice(-limit).reverse();

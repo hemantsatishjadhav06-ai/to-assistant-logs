@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OutletSupport — Agent Console</title>
 <style>
 :root {
-  --brand-yellow: #facc15;
+  --brand-yellow: #FFEA00;
   --brand-yellow-soft: #fef3c7;
   --brand-yellow-deep: #ca8a04;
   --sport-tennis: #22c55e;
@@ -198,7 +198,7 @@ a { color: inherit; }
   <div class="brand">
     <div class="logo">O</div>
     <div>OutletSupport</div>
-    <div class="pill">v3.0</div>
+    <div class="pill">v4.0</div>
   </div>
   <div class="global-search">
     <input id="globalSearch" placeholder="Search messages, intent, session…" oninput="onSearchInput(this.value)">
@@ -438,8 +438,15 @@ function priorityFor(c) {
   }
   return 3;
 }
+function customerEmail(c) {
+  return (c.messages.map(m => m.customer_email).filter(Boolean).pop()) || '';
+}
 function customerLabel(c) {
   const sid = c.session_id || '';
+  const named = c.messages.map(m => m.customer_name).filter(Boolean).pop();
+  if (named) return named;
+  const mailed = customerEmail(c);
+  if (mailed) return mailed;
   // try to find a phone or email pattern in any message
   const blob = c.messages.map(m => m.user_query || '').join(' ');
   const phone = blob.match(/\b[6-9]\d{9}\b/);
@@ -561,7 +568,7 @@ function renderDetail() {
         <div class="avatar" style="background:linear-gradient(135deg,#f97316,#ef4444);width:36px;height:36px;font-size:14px;">${escapeHtml(customerLabel(c)[0] || '·')}</div>
         <div class="who">
           <div class="who-name">${escapeHtml(customerLabel(c))} ${sportClass ? `<span class="conv-sport ${sportClass}" style="margin-left:6px;font-size:10px;">${c.sport}</span>` : ''}</div>
-          <div class="who-meta">session ${escapeHtml(c.session_id)} · ${c.messages.length} msgs · started ${ageLabel(c.last_msg_at)} ago</div>
+          <div class="who-meta">${customerEmail(c) ? escapeHtml(customerEmail(c)) + ' · ' : ''}${c.messages.length} msgs · started ${ageLabel(c.last_msg_at)} ago</div>
         </div>
         <div class="actions">
           ${isClosed ? `<button class="btn" onclick="reopenConversation()">↺ Reopen</button>` : ''}
@@ -596,6 +603,7 @@ function renderDetail() {
       <div class="field">
         <h3>Customer</h3>
         <div class="v">${escapeHtml(customerLabel(c))}</div>
+        ${customerEmail(c) ? `<div class="v-sub">✉ <a href="mailto:${escapeHtml(customerEmail(c))}" style="color:var(--brand-yellow-deep);text-decoration:none;">${escapeHtml(customerEmail(c))}</a></div>` : `<div class="v-sub" style="font-style:italic;opacity:.7;">email not captured</div>`}
         <div class="v-sub">Session: ${escapeHtml(c.session_id.slice(0, 24))}${c.session_id.length>24?'…':''}</div>
         <div class="v-sub">${c.messages.length} messages · ${[...new Set(c.messages.map(m => m.intent).filter(Boolean))].length} intents</div>
       </div>
