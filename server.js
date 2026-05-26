@@ -743,8 +743,9 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`[logs] listening on :${PORT} (max_entries=${MAX_ENTRIES})`);
-  if (DASHBOARD_PASSWORD) console.log('[auth] dashboard auth ENABLED (password required to log in)');
-  else console.warn('[auth] WARNING: DASHBOARD_PASSWORD not set — dashboard endpoints will reject all requests');
+  if (users.size > 0) console.log(`[auth] multi-user auth ENABLED (${users.size} seeded accounts)`);
+  else if (DASHBOARD_PASSWORD) console.log('[auth] legacy shared-password auth ENABLED');
+  else console.warn('[auth] WARNING: no AGENT_USERS and no DASHBOARD_PASSWORD — dashboard login will reject all requests');
   if (BOT_AUTH_TOKEN) console.log('[auth] bot auth ENABLED (Bearer token required on bot-facing endpoints)');
   else console.warn('[auth] WARNING: BOT_AUTH_TOKEN not set — bot-facing endpoints OPEN');
 });
