@@ -109,8 +109,8 @@
   <h1>TO Assistant — Agent console</h1>
   <div class="subtitle">Sign in to view conversations and reply to customers.</div>
 
-  <label for="agent_name">Your name</label>
-  <input type="text" id="agent_name" name="agent_name" required autocomplete="username" placeholder="e.g. Priya" />
+  <label for="login_id">Login ID</label>
+  <input type="text" id="login_id" name="login_id" required autocomplete="username" placeholder="e.g. admin or agent1" />
 
   <label for="password">Shared agent password</label>
   <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••" />
@@ -140,7 +140,7 @@ form.addEventListener('submit', async e => {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
       body: JSON.stringify({
-        agent_name: document.getElementById('agent_name').value.trim(),
+        id: document.getElementById('login_id').value.trim(),
         password: document.getElementById('password').value
       })
     });
@@ -150,8 +150,8 @@ form.addEventListener('submit', async e => {
       return;
     }
     if (r.status === 429) showError('Too many attempts. Please wait a minute and try again.');
-    else if (r.status === 401) showError('Wrong password. Try again.');
-    else if (r.status === 400) showError('Please enter both your name and the password.');
+    else if (r.status === 401) showError('Wrong login ID or password. Try again.');
+    else if (r.status === 400) showError('Please enter your login ID and password.');
     else if (r.status === 500) showError('Login is not configured on the server. Contact your admin.');
     else showError('Something went wrong. Please try again.');
   } catch (err) {

@@ -36,6 +36,29 @@ const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const sessions = new Map(); // sessionId -> { agent_name, expires_at }
 const loginAttempts = new Map(); // ip -> [timestamps] (for rate-limit)
 
+// ===== v3 multi-user auth: users seeded from AGENT_USERS env (durable across redeploys) =====
+// AGENT_USERS = JSON array of { id, name, role:'admin'|'agent', salt, hash }
+// hash = sha256(salt + password). Plaintext passwords are NEVER stored.
+const users = new Map(); // id(lowercase) -> { id, name, role, salt, hash, seeded }
+function hashPw(salt, pw) { return crypto.createHash('sha256').update(String(salt) + String(pw)).digest('hex'); }
+(function seedUsers() {
+  try {
+    if (!process.env.AGENT_USERS) return;
+    const arr = JSON.parse(process.env.AGENT_USERS);
+    for (const u of arr) {
+      if (u && u.id && u.hash && u.salt) {
+        users.set(String(u.id).toLowerCase(), {
+          id: String(u.id), name: String(u.name || u.id),
+          role: u.role === 'admin' ? 'admin' : 'agent',
+          salt: String(u.salt), hash: String(u.hash), seeded: true
+        });
+      }
+    }
+    console.log(`[auth] seeded ${users.size} users from AGENT_USERS`);
+  } catch (e) { console.warn('[auth] AGENT_USERS parse failed:', e.message); }
+})();
+function findUser(id) { return users.get(String(id || '').toLowerCase()); }
+
 // Tiny inline cookie helpers — no deps
 function parseCookies(req) {
   const out = {};
@@ -90,6 +113,13 @@ setInterval(() => {
 function requireAgent(req, res, next) {
   const sess = getSession(req);
   if (!sess) return res.status(401).json({ ok: false, error: 'auth_required' });
+  req.agent = sess;
+  next();
+}
+function requireAdmin(req, res, next) {
+  const sess = getSession(req);
+  if (!sess) return res.status(401).json({ ok: false, error: 'auth_required' });
+  if (sess.role !== 'admin') return res.status(403).json({ ok: false, error: 'admin_required' });
   req.agent = sess;
   next();
 }
@@ -321,30 +351,33 @@ app.post('/api/login', (req, res) => {
   attempts.push(now);
   loginAttempts.set(ip, attempts);
 
-  const { password, agent_name } = req.body || {};
-  if (!password || !agent_name) {
-    return res.status(400).json({ ok: false, error: 'password_and_agent_name_required' });
+  const body = req.body || {};
+  const loginId = String(body.id || body.agent_name || '').trim();
+  const password = body.password;
+  if (!loginId || !password) {
+    return res.status(400).json({ ok: false, error: 'id_and_password_required' });
   }
-  if (!DASHBOARD_PASSWORD) {
+  let sess = null;
+  if (users.size > 0) {
+    const u = findUser(loginId);
+    if (!u || !safeEqStr(hashPw(u.salt, String(password)), u.hash)) {
+      return res.status(401).json({ ok: false, error: 'invalid_credentials' });
+    }
+    sess = { agent_name: u.name, id: u.id, role: u.role, expires_at: now + SESSION_TTL_MS };
+  } else if (DASHBOARD_PASSWORD) {
+    if (!safeEqStr(String(password), DASHBOARD_PASSWORD)) {
+      return res.status(401).json({ ok: false, error: 'invalid_password' });
+    }
+    sess = { agent_name: loginId.slice(0, 60), id: loginId.toLowerCase(), role: 'agent', expires_at: now + SESSION_TTL_MS };
+  } else {
     return res.status(500).json({ ok: false, error: 'server_not_configured' });
   }
-  if (!safeEqStr(String(password), DASHBOARD_PASSWORD)) {
-    return res.status(401).json({ ok: false, error: 'invalid_password' });
-  }
-  const trimmedName = String(agent_name).trim().slice(0, 60);
-  if (!trimmedName) {
-    return res.status(400).json({ ok: false, error: 'agent_name_required' });
-  }
   const sid = newSessionId();
-  sessions.set(sid, {
-    agent_name: trimmedName,
-    expires_at: now + SESSION_TTL_MS
-  });
-  // Reset rate limit on successful login
+  sessions.set(sid, sess);
   loginAttempts.delete(ip);
   setCookie(res, 'to_session', sid, { maxAge: SESSION_TTL_MS / 1000 });
-  console.log(`[auth] login ok: agent="${trimmedName}" ip=${ip}`);
-  res.json({ ok: true, agent_name: trimmedName });
+  console.log(`[auth] login ok: id="${sess.id}" role=${sess.role} ip=${ip}`);
+  res.json({ ok: true, agent_name: sess.agent_name, role: sess.role });
 });
 
 // POST /api/logout — clears session
@@ -357,8 +390,40 @@ app.post('/api/logout', (req, res) => {
 
 // GET /api/me — returns current agent (requires auth)
 app.get('/api/me', requireAgent, (req, res) => {
-  res.json({ ok: true, agent_name: req.agent.agent_name });
+  res.json({ ok: true, agent_name: req.agent.agent_name, id: req.agent.id || null, role: req.agent.role || 'agent' });
 });
+
+// ===== v3 admin: manage agent profiles (admin only) =====
+app.get('/api/users', requireAdmin, (req, res) => {
+  res.json({ ok: true, users: Array.from(users.values()).map(u => ({ id: u.id, name: u.name, role: u.role, seeded: !!u.seeded })) });
+});
+app.post('/api/users', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  const id = String(b.id || '').trim().toLowerCase().slice(0, 40);
+  const name = String(b.name || id).trim().slice(0, 60);
+  const role = b.role === 'admin' ? 'admin' : 'agent';
+  const password = String(b.password || '');
+  if (!id || !password) return res.status(400).json({ ok: false, error: 'id_and_password_required' });
+  if (!/^[a-z0-9._-]+$/.test(id)) return res.status(400).json({ ok: false, error: 'id_must_be_alphanumeric' });
+  if (users.has(id)) return res.status(409).json({ ok: false, error: 'id_exists' });
+  if (password.length < 6) return res.status(400).json({ ok: false, error: 'password_too_short' });
+  const salt = crypto.randomBytes(8).toString('hex');
+  users.set(id, { id, name, role, salt, hash: hashPw(salt, password), seeded: false });
+  audit(req, 'create_user', id, null, { name, role });
+  console.log(`[admin] created user id="${id}" role=${role} by ${req.agent.agent_name}`);
+  res.json({ ok: true, user: { id, name, role } });
+});
+app.delete('/api/users/:id', requireAdmin, (req, res) => {
+  const id = String(req.params.id || '').toLowerCase();
+  const u = users.get(id);
+  if (!u) return res.status(404).json({ ok: false, error: 'not_found' });
+  if (u.seeded) return res.status(400).json({ ok: false, error: 'cannot_delete_seeded_user' });
+  if (id === (req.agent.id || '')) return res.status(400).json({ ok: false, error: 'cannot_delete_self' });
+  users.delete(id);
+  audit(req, 'delete_user', id, { name: u.name, role: u.role }, null);
+  res.json({ ok: true });
+});
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
 // ============================================================
 // BOT-FACING endpoints (require BOT_AUTH_TOKEN)

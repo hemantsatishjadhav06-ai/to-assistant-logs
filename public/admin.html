@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OutletSupport — Team management</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #e3e6eb; --text: #1a1d24;
+    --muted: #5a6478; --brand: #FFEA00; --brand-deep: #ca8a04; --error: #c0392b; --ok: #16a34a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 14px 22px; background: var(--brand); }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: #000; color: var(--brand);
+    display: grid; place-items: center; font-weight: 800; }
+  .topbar h1 { font-size: 16px; margin: 0; font-weight: 700; }
+  .topbar .right { margin-left: auto; font-size: 13px; }
+  .topbar a { color: #1a1d24; font-weight: 600; text-decoration: none; }
+  .wrap { max-width: 860px; margin: 26px auto; padding: 0 18px; display: grid; gap: 22px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,.06); }
+  h2 { font-size: 15px; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .5px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 8px; border-bottom: 1px solid var(--border); }
+  .pill { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+  .pill.admin { background: var(--brand); color: #1a1d24; }
+  .pill.agent { background: #eef0f4; color: var(--muted); }
+  .badge-seed { font-size: 10px; color: var(--muted); margin-left: 6px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  label { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin: 0 0 5px; }
+  input, select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px;
+    font-size: 14px; font-family: inherit; background: #fff; color: var(--text); }
+  input:focus, select:focus { outline: 2px solid var(--brand); border-color: var(--brand); }
+  button { border: none; border-radius: 9px; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .btn-primary { background: var(--brand); color: #1a1d24; padding: 11px 18px; margin-top: 16px; }
+  .btn-primary:hover { background: #FFD400; }
+  .btn-del { background: transparent; color: var(--error); border: 1px solid #ecc; padding: 5px 12px; border-radius: 8px; }
+  .btn-del:hover { background: rgba(192,57,43,.08); }
+  .msg { margin-top: 14px; padding: 10px 12px; border-radius: 9px; font-size: 13px; display: none; }
+  .msg.show { display: block; }
+  .msg.ok { background: rgba(22,163,74,.12); color: var(--ok); }
+  .msg.err { background: rgba(192,57,43,.1); color: var(--error); }
+  .gate { display: grid; place-items: center; height: 70vh; color: var(--muted); text-align: center; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">O</div>
+  <h1>OutletSupport — Team management</h1>
+  <div class="right"><a href="/">← Back to console</a></div>
+</div>
+
+<div id="gate" class="gate">Checking access…</div>
+
+<div class="wrap" id="app" style="display:none;">
+  <div class="card">
+    <h2>Agents</h2>
+    <table>
+      <thead><tr><th>Login ID</th><th>Name</th><th>Role</th><th></th></tr></thead>
+      <tbody id="userRows"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Create a new profile</h2>
+    <div class="grid">
+      <div><label for="f_id">Login ID</label><input id="f_id" placeholder="e.g. agent4" autocomplete="off" /></div>
+      <div><label for="f_name">Display name</label><input id="f_name" placeholder="e.g. Priya" autocomplete="off" /></div>
+      <div><label for="f_role">Role</label><select id="f_role"><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
+      <div><label for="f_pw">Password</label><input id="f_pw" type="text" placeholder="min 6 characters" autocomplete="off" /></div>
+    </div>
+    <button class="btn-primary" id="createBtn">Create profile</button>
+    <div class="hint">Note: profiles created here last until the next redeploy unless a persistent disk is attached. The seeded admin + agents always survive.</div>
+    <div class="msg" id="msg"></div>
+  </div>
+</div>
+
+<script>
+async function api(path, opts) {
+  const r = await fetch(path, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, opts || {}));
+  return r;
+}
+function showMsg(text, ok) {
+  const m = document.getElementById('msg');
+  m.textContent = text; m.className = 'msg show ' + (ok ? 'ok' : 'err');
+}
+function rowHtml(u) {
+  const del = u.seeded ? '<span class="badge-seed">seeded</span>'
+    : '<button class="btn-del" onclick="delUser(\'' + u.id + '\')">Remove</button>';
+  return '<tr><td><b>' + u.id + '</b></td><td>' + (u.name || '') + '</td><td><span class="pill ' + u.role + '">' + u.role + '</span></td><td style="text-align:right;">' + del + '</td></tr>';
+}
+async function loadUsers() {
+  const r = await api('/api/users');
+  if (!r.ok) { showMsg('Could not load users.', false); return; }
+  const d = await r.json();
+  document.getElementById('userRows').innerHTML = (d.users || []).map(rowHtml).join('');
+}
+async function delUser(id) {
+  if (!confirm('Remove profile "' + id + '"?')) return;
+  const r = await api('/api/users/' + encodeURIComponent(id), { method: 'DELETE' });
+  const d = await r.json().catch(function(){ return {}; });
+  if (r.ok && d.ok) { showMsg('Removed ' + id + '.', true); loadUsers(); }
+  else showMsg('Could not remove: ' + (d.error || r.status), false);
+}
+document.getElementById('createBtn').addEventListener('click', async function () {
+  const payload = {
+    id: document.getElementById('f_id').value.trim(),
+    name: document.getElementById('f_name').value.trim(),
+    role: document.getElementById('f_role').value,
+    password: document.getElementById('f_pw').value
+  };
+  if (!payload.id || !payload.password) { showMsg('Login ID and password are required.', false); return; }
+  const r = await api('/api/users', { method: 'POST', body: JSON.stringify(payload) });
+  const d = await r.json().catch(function(){ return {}; });
+  if (r.ok && d.ok) {
+    showMsg('Created "' + d.user.id + '". Share the password with them securely — it is not shown again.', true);
+    document.getElementById('f_id').value = ''; document.getElementById('f_name').value = ''; document.getElementById('f_pw').value = '';
+    loadUsers();
+  } else {
+    const map = { id_exists: 'That login ID already exists.', password_too_short: 'Password must be at least 6 characters.',
+      id_must_be_alphanumeric: 'Login ID can use letters, numbers, . _ - only.', admin_required: 'Admins only.' };
+    showMsg(map[d.error] || ('Could not create: ' + (d.error || r.status)), false);
+  }
+});
+(async function init() {
+  let me;
+  try { const r = await api('/api/me'); me = r.ok ? await r.json() : null; } catch (e) { me = null; }
+  if (!me || !me.ok) { location.href = '/login'; return; }
+  if (me.role !== 'admin') {
+    document.getElementById('gate').innerHTML = 'This page is for admins only.<br><a href="/" style="color:var(--brand-deep);">Back to console</a>';
+    return;
+  }
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('app').style.display = 'grid';
+  loadUsers();
+})();
+</script>
+</body>
+</html>
