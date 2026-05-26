@@ -205,6 +205,7 @@ a { color: inherit; }
   </div>
   <div class="top-actions">
     <button class="icon-btn" id="notifBtn" title="Notifications" onclick="onNotifClick()">🔔<span class="dot-badge zero" id="notifBadge"></span></button>
+    <button class="icon-btn" id="alertBtn" title="Sound + desktop alerts (click to toggle)" onclick="toggleAlerts()">🔊</button>
     <button class="icon-btn" title="Toggle theme" onclick="toggleTheme()">🌓</button>
     <button class="icon-btn" title="Keyboard shortcuts (?)" onclick="showCheats()">⌨️</button>
     <div class="agent-chip">
@@ -336,6 +337,63 @@ async function api(path, opts = {}) {
   return body;
 }
 
+/* ---------- v4.2: instant agent alerts (sound + desktop + tab badge) ---------- */
+let _audioCtx = null;
+let _alertsOn = (localStorage.getItem('os.alerts') !== 'off');
+let _titleBase = document.title;
+function _beep() {
+  if (!_alertsOn) return;
+  try {
+    _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    const t = _audioCtx.currentTime;
+    [0, 0.18].forEach(function (off) {
+      const o = _audioCtx.createOscillator(), g = _audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = off ? 1100 : 880;
+      g.gain.setValueAtTime(0.0001, t + off);
+      g.gain.exponentialRampToValueAtTime(0.25, t + off + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.16);
+      o.connect(g); g.connect(_audioCtx.destination);
+      o.start(t + off); o.stop(t + off + 0.17);
+    });
+  } catch (e) {}
+}
+function _desktopNotify(title, body) {
+  try {
+    if (!_alertsOn || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if (document.visibilityState === 'visible') return;
+    const n = new Notification(title, { body: body, tag: 'os-handoff', renotify: true });
+    n.onclick = function () { window.focus(); n.close(); };
+  } catch (e) {}
+}
+function _updateTitleBadge(count) { document.title = count > 0 ? ('(' + count + ') ' + _titleBase) : _titleBase; }
+function alertNewHandoff(fresh) {
+  if (!fresh || !fresh.length) return;
+  _beep();
+  const n = fresh[fresh.length - 1];
+  _desktopNotify('New support request', 'A ' + (n.sport || '') + ' customer needs a human agent.');
+  toast('🔔 ' + fresh.length + ' customer' + (fresh.length > 1 ? 's' : '') + ' waiting for an agent', 'err');
+}
+function enableAlerts() {
+  _alertsOn = true; localStorage.setItem('os.alerts', 'on');
+  try { _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)(); _audioCtx.resume(); } catch (e) {}
+  try { if (typeof Notification !== 'undefined' && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+  _beep(); toast('Alerts on', 'ok'); updateAlertBtn();
+}
+function toggleAlerts() {
+  if (_alertsOn) { _alertsOn = false; localStorage.setItem('os.alerts', 'off'); toast('Alerts muted', 'ok'); updateAlertBtn(); }
+  else { enableAlerts(); }
+}
+function updateAlertBtn() { const b = document.getElementById('alertBtn'); if (b) b.textContent = _alertsOn ? '🔊' : '🔇'; }
+function initAlerts() {
+  updateAlertBtn();
+  try { if (typeof Notification !== 'undefined' && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+  document.addEventListener('click', function _unlock() {
+    try { _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)(); _audioCtx.resume(); } catch (e) {}
+    document.removeEventListener('click', _unlock);
+  }, { once: true });
+}
+
 /* ---------- Boot ---------- */
 async function boot() {
   // restore theme
@@ -352,6 +410,7 @@ async function boot() {
   const initial = (State.agent.agent_name || 'A')[0].toUpperCase();
   document.getElementById('agentAvatar').textContent = initial;
   document.getElementById('boot').style.display = 'none';
+  initAlerts();
 
   await refreshAll();
   startPolling();
@@ -368,14 +427,25 @@ async function refreshAll() {
     State.logs = logsRes.logs || [];
     State.aiState = { global: stateRes.global || {}, perCustomer: stateRes.perCustomer || {} };
     if (notifRes.notifications && notifRes.notifications.length) {
-      // append + de-dup
       const seen = new Set(State.notifications.map(n => n.id));
-      for (const n of notifRes.notifications) if (!seen.has(n.id)) State.notifications.push(n);
+      const fresh = [];
+      for (const n of notifRes.notifications) if (!seen.has(n.id)) { State.notifications.push(n); fresh.push(n); }
       State.notifSince = Math.max(State.notifSince, ...notifRes.notifications.map(n => n.id));
+      if (State._alertReady) alertNewHandoff(fresh);
     }
     State.notifications = State.notifications.filter(n => n.status !== 'read');
+    // Soft alert when a customer sends a new message while AI is off (active human chat)
+    {
+      const aiOff = State.aiState.perCustomer || {};
+      const prevMax = State._lastLogId || 0;
+      const newCust = (State.logs || []).filter(l => (l.id || 0) > prevMax && (l.user_query || '').trim() && l.source !== 'human' && aiOff[l.session_id] === 'off');
+      if (State._alertReady && newCust.length) _beep();
+      State._lastLogId = (State.logs || []).reduce((m, l) => Math.max(m, l.id || 0), prevMax);
+    }
+    _updateTitleBadge(State.notifications.length);
     rebuildConversations();
     render();
+    State._alertReady = true;
     State.pollErrors = 0;
   } catch (e) {
     State.pollErrors++;
@@ -890,7 +960,7 @@ function toast(msg, kind) {
 /* ---------- Polling ---------- */
 function startPolling() {
   if (State.pollTimer) clearInterval(State.pollTimer);
-  State.pollTimer = setInterval(() => refreshAll(), 5000);
+  State.pollTimer = setInterval(() => refreshAll(), 3000);
 }
 
 /* ---------- Keyboard ---------- */
