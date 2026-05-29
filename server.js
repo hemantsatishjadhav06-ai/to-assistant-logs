@@ -357,18 +357,21 @@ app.post('/api/login', (req, res) => {
   if (!loginId || !password) {
     return res.status(400).json({ ok: false, error: 'id_and_password_required' });
   }
+  // Auth resolution order (v3.1):
+  //  1. Seeded/created user account (AGENT_USERS) — keeps the user's own role.
+  //  2. Shared DASHBOARD_PASSWORD — master key, grants ADMIN so the owner is
+  //     never locked out of /admin even after named accounts are seeded.
+  //     (Previously the shared password was only honoured when NO users existed,
+  //     and it granted 'agent' — so the admin panel was unreachable.)
   let sess = null;
-  if (users.size > 0) {
-    const u = findUser(loginId);
-    if (!u || !safeEqStr(hashPw(u.salt, String(password)), u.hash)) {
-      return res.status(401).json({ ok: false, error: 'invalid_credentials' });
-    }
+  const u = findUser(loginId);
+  if (u && safeEqStr(hashPw(u.salt, String(password)), u.hash)) {
     sess = { agent_name: u.name, id: u.id, role: u.role, expires_at: now + SESSION_TTL_MS };
-  } else if (DASHBOARD_PASSWORD) {
-    if (!safeEqStr(String(password), DASHBOARD_PASSWORD)) {
-      return res.status(401).json({ ok: false, error: 'invalid_password' });
-    }
-    sess = { agent_name: loginId.slice(0, 60), id: loginId.toLowerCase(), role: 'agent', expires_at: now + SESSION_TTL_MS };
+  } else if (DASHBOARD_PASSWORD && safeEqStr(String(password), DASHBOARD_PASSWORD)) {
+    const fid = (loginId || 'admin').toLowerCase().slice(0, 40);
+    sess = { agent_name: (loginId || 'Admin').slice(0, 60), id: fid, role: 'admin', expires_at: now + SESSION_TTL_MS };
+  } else if (users.size > 0 || DASHBOARD_PASSWORD) {
+    return res.status(401).json({ ok: false, error: 'invalid_credentials' });
   } else {
     return res.status(500).json({ ok: false, error: 'server_not_configured' });
   }

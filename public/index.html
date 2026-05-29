@@ -159,9 +159,11 @@ a { color: inherit; }
 .reply-tool.ai { background: linear-gradient(90deg, rgba(99,102,241,.15), rgba(168,85,247,.15)); color:#a78bfa; }
 .reply-tool .kbd { font-family: var(--font-mono); font-size: 10.5px; opacity: .7; margin-left: 4px; }
 .reply-input { display: flex; gap: 10px; align-items: flex-end; }
-.reply-input textarea { flex: 1; resize: none; min-height: 64px; max-height: 220px; padding: 12px 14px; border-radius: var(--radius-l); background: var(--bg); border: 1px solid var(--border); outline: none; transition: border-color .15s; line-height: 1.5; }
+/* min-width:0 lets the textarea shrink instead of pushing the Send button off-screen */
+.reply-input textarea { flex: 1 1 auto; min-width: 0; resize: none; min-height: 64px; max-height: 220px; padding: 12px 14px; border-radius: var(--radius-l); background: var(--bg); border: 1px solid var(--border); outline: none; transition: border-color .15s; line-height: 1.5; font-family: inherit; font-size: 13.5px; }
 .reply-input textarea:focus { border-color: var(--brand-yellow); }
-.send-row { display:flex; align-items:center; gap:8px; }
+.send-row { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+#sendBtn { white-space: nowrap; }
 
 .c360 { border-left: 1px solid var(--border); padding: 18px 16px; overflow-y: auto; background: var(--bg-elev); }
 .c360 h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-soft); margin-bottom: 8px; font-weight: 600; }
@@ -194,6 +196,39 @@ a { color: inherit; }
 .modal-box .checklist { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 12.5px; margin-bottom: 16px; }
 .modal-box .checklist .row { display: flex; gap: 8px; padding: 3px 0; color: var(--text-muted); }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ===== Insights overlay ===== */
+.insights { position: fixed; inset: 0; background: var(--bg); display: none; z-index: 300; overflow-y: auto; }
+.insights.show { display: block; }
+.ins-head { position: sticky; top: 0; display: flex; align-items: center; gap: 12px; padding: 16px 26px; background: var(--bg-elev); border-bottom: 1px solid var(--border); z-index: 2; }
+.ins-head h2 { font-size: 18px; margin: 0; }
+.ins-head .sub { font-size: 12.5px; color: var(--text-soft); }
+.ins-wrap { max-width: 1080px; margin: 0 auto; padding: 22px 26px 60px; display: grid; gap: 20px; }
+.ins-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.ins-kpi { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-l); padding: 16px 18px; }
+.ins-kpi .n { font-size: 28px; font-weight: 800; line-height: 1; }
+.ins-kpi .l { font-size: 11.5px; color: var(--text-soft); text-transform: uppercase; letter-spacing: .06em; margin-top: 8px; }
+.ins-kpi .d { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.ins-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-l); padding: 18px 20px; }
+.ins-card h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-soft); margin: 0 0 14px; font-weight: 700; }
+.ins-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.ins-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+.ins-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.bar-row { display: grid; grid-template-columns: 130px 1fr 48px; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12.5px; }
+.bar-row .lbl { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-row .track { background: var(--bg-elev-2); border-radius: 5px; height: 16px; overflow: hidden; }
+.bar-row .fill { height: 100%; border-radius: 5px; background: var(--brand-yellow); }
+.bar-row .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
+@media (max-width: 820px) { .ins-kpis { grid-template-columns: repeat(2,1fr); } .ins-2col { grid-template-columns: 1fr; } }
+.daily-chart { display: flex; align-items: flex-end; gap: 6px; height: 220px; padding-top: 18px; }
+.day-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+.day-bars { width: 100%; max-width: 34px; display: flex; flex-direction: column-reverse; border-radius: 5px 5px 0 0; overflow: hidden; transition: height .2s; }
+.day-bars .seg { width: 100%; }
+.day-bars .seg.tennis { background: var(--sport-tennis); }
+.day-bars .seg.padel { background: var(--sport-padel); }
+.day-bars .seg.pickleball { background: var(--sport-pickle); }
+.day-total { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+.day-lbl { font-size: 10.5px; color: var(--text-soft); margin-top: 6px; white-space: nowrap; transform: rotate(-35deg); transform-origin: center; }
 
 .boot { position: fixed; inset: 0; display:grid; place-items:center; background: var(--bg); z-index: 999; }
 .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--brand-yellow); border-radius: 999px; animation: spin .9s linear infinite; }
@@ -250,7 +285,7 @@ a { color: inherit; }
       <div class="nav-label">Service</div>
       <div class="nav-item" onclick="manualRefresh()"><span class="ico">🔄</span> Refresh now</div>
       <div class="nav-item" onclick="toast('Audit log lives at /var/data/audit.jsonl','ok')"><span class="ico">📜</span> Audit log</div>
-      <div class="nav-item" onclick="toast('Insights — Phase 3','ok')"><span class="ico">📊</span> Insights</div>
+      <div class="nav-item" onclick="openInsights()"><span class="ico">📊</span> Insights</div>
       <div class="nav-item" onclick="location.href='/admin'"><span class="ico">👥</span> Manage agents</div>
     </div>
   </aside>
@@ -308,6 +343,20 @@ a { color: inherit; }
       <div class="cheatsheet-row"><span>Hand back to AI</span><span class="kbd">h</span></div>
     </div>
   </div>
+</div>
+
+<div class="insights" id="insights">
+  <div class="ins-head">
+    <div>
+      <h2>📊 Insights</h2>
+      <div class="sub" id="insSub">Loading…</div>
+    </div>
+    <div style="margin-left:auto; display:flex; gap:8px;">
+      <button class="btn" onclick="renderInsights()">↻ Refresh</button>
+      <button class="btn primary" onclick="closeInsights()">✕ Close</button>
+    </div>
+  </div>
+  <div class="ins-wrap" id="insBody"></div>
 </div>
 
 <div class="toast" id="toast"><span class="toast-dot"></span><span id="toastText"></span></div>
@@ -1006,6 +1055,154 @@ function toast(msg, kind) {
   el.classList.add('show');
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+/* ---------- Insights ---------- */
+function openInsights() {
+  document.getElementById('insights').classList.add('show');
+  renderInsights();
+}
+function closeInsights() {
+  document.getElementById('insights').classList.remove('show');
+}
+function _esc(s){ return escapeHtml(s); }
+function _barRows(items, opts) {
+  opts = opts || {};
+  const max = Math.max(1, ...items.map(i => i.value));
+  if (!items.length) return '<div class="v-sub" style="font-style:italic;color:var(--text-soft);">No data yet.</div>';
+  return items.map(i => {
+    const pct = Math.round((i.value / max) * 100);
+    const color = i.color || 'var(--brand-yellow)';
+    return `<div class="bar-row"><span class="lbl" title="${_esc(i.label)}">${_esc(i.label)}</span>`
+      + `<span class="track"><span class="fill" style="width:${pct}%;background:${color};"></span></span>`
+      + `<span class="val">${opts.pct ? i.value + '%' : i.value}</span></div>`;
+  }).join('');
+}
+async function renderInsights() {
+  const body = document.getElementById('insBody');
+  const sub = document.getElementById('insSub');
+  sub.textContent = 'Loading…';
+  let logs = [];
+  try {
+    const r = await api('/api/logs?limit=5000');
+    logs = r.logs || [];
+  } catch (e) { sub.textContent = 'Could not load logs.'; return; }
+
+  const SPORTS = ['tennis','padel','pickleball'];
+  const sportColor = { tennis:'var(--sport-tennis)', padel:'var(--sport-padel)', pickleball:'var(--sport-pickle)' };
+
+  // ----- group into conversations -----
+  const convs = new Map();
+  for (const l of logs) {
+    const sid = l.session_id || '(none)';
+    if (!convs.has(sid)) convs.set(sid, { sport: l.sport, msgs: 0, askedHuman: false, gotHuman: false });
+    const c = convs.get(sid);
+    c.msgs++;
+    if (l.source === 'human') c.gotHuman = true;
+    if (/ai_off_hold|talk_to_human|needs_human/i.test(l.intent || '') || l.endpoint === '/api/customer-needs-human') c.askedHuman = true;
+  }
+  const totalConvs = convs.size;
+  const totalMsgs = logs.length;
+  const askedHuman = [...convs.values()].filter(c => c.askedHuman).length;
+  const gotHuman = [...convs.values()].filter(c => c.gotHuman).length;
+  const handoffRate = totalConvs ? Math.round((askedHuman / totalConvs) * 100) : 0;
+  const answeredRate = askedHuman ? Math.round((gotHuman / askedHuman) * 100) : 0;
+  const avgMsgs = totalConvs ? (totalMsgs / totalConvs).toFixed(1) : '0';
+
+  // ----- daily volume (last 14 days), stacked by sport -----
+  const days = [];
+  const dayKey = d => d.toISOString().slice(0,10);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const idx = {};
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const k = dayKey(d);
+    const rec = { key: k, label: (d.getMonth()+1) + '/' + d.getDate(), tennis:0, padel:0, pickleball:0, total:0 };
+    idx[k] = rec; days.push(rec);
+  }
+  for (const l of logs) {
+    const ts = new Date(l.timestamp || l.received_at);
+    if (isNaN(ts)) continue;
+    const k = dayKey(new Date(ts.getFullYear(), ts.getMonth(), ts.getDate()));
+    const rec = idx[k]; if (!rec) continue;
+    const sp = SPORTS.includes(l.sport) ? l.sport : null;
+    if (sp) rec[sp]++; rec.total++;
+  }
+  const maxDay = Math.max(1, ...days.map(d => d.total));
+  const dailyChart = days.map(d => {
+    const colH = Math.round((d.total / maxDay) * 165);
+    const segs = SPORTS.filter(sp => d[sp] > 0).map(sp => {
+      const h = (d[sp] / d.total) * 100;
+      return `<div class="seg ${sp}" style="height:${h}%" title="${sp}: ${d[sp]}"></div>`;
+    }).join('');
+    return `<div class="day-col">
+        <div class="day-total">${d.total || ''}</div>
+        <div class="day-bars" style="height:${colH}px;">${segs}</div>
+        <div class="day-lbl">${d.label}</div>
+      </div>`;
+  }).join('');
+
+  // ----- chats by sport -----
+  const bySport = SPORTS.map(sp => ({ label: sp[0].toUpperCase()+sp.slice(1), value: logs.filter(l => l.sport === sp).length, color: sportColor[sp] }))
+    .sort((a,b) => b.value - a.value);
+
+  // ----- top intents -----
+  const intentCount = {};
+  for (const l of logs) {
+    let it = (l.intent || '').trim();
+    if (!it) continue;
+    it = it.replace(/_short_circuit$/, '');
+    intentCount[it] = (intentCount[it] || 0) + 1;
+  }
+  const topIntents = Object.entries(intentCount).map(([label,value]) => ({ label, value }))
+    .sort((a,b) => b.value - a.value).slice(0, 10);
+
+  // ----- busiest hours (0-23, local time) -----
+  const hours = new Array(24).fill(0);
+  for (const l of logs) {
+    const ts = new Date(l.timestamp || l.received_at);
+    if (!isNaN(ts)) hours[ts.getHours()]++;
+  }
+  const peakHour = hours.indexOf(Math.max(...hours));
+  const hourRows = hours.map((v,h) => ({ label: String(h).padStart(2,'0')+':00', value: v }))
+    .filter(r => r.value > 0).sort((a,b) => b.value - a.value).slice(0, 8);
+
+  sub.textContent = `${totalMsgs.toLocaleString()} logged turns · ${totalConvs.toLocaleString()} conversations · updated ${new Date().toLocaleTimeString()}`;
+
+  body.innerHTML = `
+    <div class="ins-kpis">
+      <div class="ins-kpi"><div class="n">${totalConvs.toLocaleString()}</div><div class="l">Conversations</div><div class="d">${totalMsgs.toLocaleString()} total turns</div></div>
+      <div class="ins-kpi"><div class="n">${handoffRate}%</div><div class="l">Asked for a human</div><div class="d">${askedHuman} of ${totalConvs} chats</div></div>
+      <div class="ins-kpi"><div class="n">${answeredRate}%</div><div class="l">Handoffs answered</div><div class="d">${gotHuman} got an agent reply</div></div>
+      <div class="ins-kpi"><div class="n">${avgMsgs}</div><div class="l">Avg turns / chat</div><div class="d">busiest hour ${String(peakHour).padStart(2,'0')}:00</div></div>
+    </div>
+
+    <div class="ins-card">
+      <h3>Daily chat volume — last 14 days</h3>
+      <div class="daily-chart">${dailyChart}</div>
+      <div class="ins-legend">
+        <span><i style="background:var(--sport-tennis);"></i>Tennis</span>
+        <span><i style="background:var(--sport-padel);"></i>Padel</span>
+        <span><i style="background:var(--sport-pickle);"></i>Pickleball</span>
+      </div>
+    </div>
+
+    <div class="ins-2col">
+      <div class="ins-card"><h3>Chats by sport</h3>${_barRows(bySport)}</div>
+      <div class="ins-card"><h3>Top intents</h3>${_barRows(topIntents)}</div>
+    </div>
+
+    <div class="ins-2col">
+      <div class="ins-card"><h3>Busiest hours (local time)</h3>${_barRows(hourRows)}</div>
+      <div class="ins-card"><h3>Human handoff</h3>
+        ${_barRows([
+          { label: 'Asked for human', value: askedHuman, color: 'var(--priority-1)' },
+          { label: 'Got an agent reply', value: gotHuman, color: '#10b981' },
+          { label: 'Handled by AI only', value: Math.max(0, totalConvs - askedHuman), color: 'var(--brand-yellow)' }
+        ])}
+      </div>
+    </div>
+  `;
 }
 
 /* ---------- Polling ---------- */
