@@ -731,7 +731,9 @@ app.get('/login', (req, res) => {
 });
 
 // Static assets (login.html stylesheet, JS, etc.)
-app.use(express.static(path.join(__dirname, 'public')));
+// index:false so a bare GET / does NOT auto-serve index.html and bypass the
+// auth gate below — the dashboard must only be served to an authenticated session.
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // Root: serve dashboard if authed, otherwise redirect to /login
 app.get('/', (req, res) => {

@@ -650,6 +650,9 @@ function renderDetail() {
   }
   const s = statusFor(c);
   const ai = aiStatusFor(c.session_id);
+  const aiOn = ai === 'on';   // FIX: was referenced at the AI toggle button (was a ReferenceError
+                              // because aiOn only existed as a local inside statusFor()). The throw
+                              // aborted renderDetail() so the chat thread never rendered.
   const sportClass = ['tennis','padel','pickleball'].includes(c.sport) ? c.sport : '';
   const me = (State.agent.agent_name || '').toLowerCase();
   const isMine = s.kind === 'claimed' && (s.who||'').toLowerCase() === me;
