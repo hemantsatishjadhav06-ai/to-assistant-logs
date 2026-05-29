@@ -229,6 +229,19 @@ a { color: inherit; }
 .day-bars .seg.pickleball { background: var(--sport-pickle); }
 .day-total { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
 .day-lbl { font-size: 10.5px; color: var(--text-soft); margin-top: 6px; white-space: nowrap; transform: rotate(-35deg); transform-origin: center; }
+.svc-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; }
+.svc { border: 1px solid var(--border); border-radius: var(--radius-l); padding: 14px 16px; background: var(--bg); }
+.svc.bad { border-color: rgba(239,68,68,.5); background: rgba(239,68,68,.05); }
+.svc-top { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.svc-top .nm { font-weight:700; font-size:14px; }
+.pill-s { font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:999px; letter-spacing:.03em; }
+.pill-s.ok { background: rgba(16,185,129,.15); color:#10b981; }
+.pill-s.warn { background: rgba(234,179,8,.18); color:#ca8a04; }
+.pill-s.bad { background: rgba(239,68,68,.15); color:#ef4444; }
+.svc .kv { font-size:12px; color:var(--text-muted); margin:3px 0; }
+.svc .kv b { color: var(--text); font-weight:600; }
+.svc .errline { font-family: var(--font-mono); font-size:11px; color:#ef4444; background:var(--bg-elev-2); border-radius:5px; padding:4px 7px; margin-top:5px; white-space:pre-wrap; word-break:break-word; }
+@media (max-width: 820px) { .svc-grid { grid-template-columns: 1fr; } }
 
 .boot { position: fixed; inset: 0; display:grid; place-items:center; background: var(--bg); z-index: 999; }
 .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--brand-yellow); border-radius: 999px; animation: spin .9s linear infinite; }
@@ -286,7 +299,8 @@ a { color: inherit; }
       <div class="nav-item" onclick="manualRefresh()"><span class="ico">🔄</span> Refresh now</div>
       <div class="nav-item" onclick="toast('Audit log lives at /var/data/audit.jsonl','ok')"><span class="ico">📜</span> Audit log</div>
       <div class="nav-item" onclick="openInsights()"><span class="ico">📊</span> Insights</div>
-      <div class="nav-item" onclick="location.href='/admin'"><span class="ico">👥</span> Manage agents</div>
+      <div class="nav-item" id="navOps" style="display:none;" onclick="openOps()"><span class="ico">🩺</span> Ops Monitor</div>
+      <div class="nav-item" id="navAdmin" style="display:none;" onclick="location.href='/admin'"><span class="ico">👥</span> Manage agents</div>
     </div>
   </aside>
 
@@ -357,6 +371,20 @@ a { color: inherit; }
     </div>
   </div>
   <div class="ins-wrap" id="insBody"></div>
+</div>
+
+<div class="insights" id="ops">
+  <div class="ins-head">
+    <div>
+      <h2>🩺 Ops Monitor <span style="font-size:11px;font-weight:600;color:var(--text-soft);border:1px solid var(--border);border-radius:999px;padding:2px 8px;margin-left:6px;">admin only</span></h2>
+      <div class="sub" id="opsSub">Loading…</div>
+    </div>
+    <div style="margin-left:auto; display:flex; gap:8px;">
+      <button class="btn" onclick="runOps()" id="opsRunBtn">▶ Run check now</button>
+      <button class="btn primary" onclick="closeOps()">✕ Close</button>
+    </div>
+  </div>
+  <div class="ins-wrap" id="opsBody"></div>
 </div>
 
 <div class="toast" id="toast"><span class="toast-dot"></span><span id="toastText"></span></div>
@@ -472,6 +500,11 @@ async function boot() {
   document.getElementById('agentName').textContent = State.agent.agent_name || 'Agent';
   const initial = (State.agent.agent_name || 'A')[0].toUpperCase();
   document.getElementById('agentAvatar').textContent = initial;
+  // Admin-only navigation (Ops Monitor + Manage agents)
+  if (State.agent.role === 'admin') {
+    const o = document.getElementById('navOps'); if (o) o.style.display = '';
+    const a = document.getElementById('navAdmin'); if (a) a.style.display = '';
+  }
   document.getElementById('boot').style.display = 'none';
   initAlerts();
 
@@ -1203,6 +1236,84 @@ async function renderInsights() {
       </div>
     </div>
   `;
+}
+
+/* ---------- Ops Monitor (admin only) ---------- */
+function openOps() {
+  if (!State.agent || State.agent.role !== 'admin') { toast('Admins only', 'err'); return; }
+  document.getElementById('ops').classList.add('show');
+  loadOps(false);
+}
+function closeOps() { document.getElementById('ops').classList.remove('show'); }
+function runOps() { loadOps(true); }
+function _money(v) { return (v == null) ? '—' : ('$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })); }
+function _ago(iso) { if (!iso) return '—'; const s = (Date.now() - new Date(iso).getTime())/1000; if (s<60) return Math.round(s)+'s ago'; if (s<3600) return Math.round(s/60)+'m ago'; if (s<86400) return Math.round(s/3600)+'h ago'; return Math.round(s/86400)+'d ago'; }
+async function loadOps(forceRun) {
+  const sub = document.getElementById('opsSub');
+  const body = document.getElementById('opsBody');
+  const btn = document.getElementById('opsRunBtn');
+  sub.textContent = forceRun ? 'Running checks…' : 'Loading…';
+  if (btn) btn.disabled = true;
+  let rep;
+  try {
+    const r = forceRun
+      ? await api('/api/ops/run', { method: 'POST', body: '{}' })
+      : await api('/api/ops/report');
+    rep = r.report;
+  } catch (e) {
+    sub.textContent = 'Could not load report: ' + e.message;
+    if (btn) btn.disabled = false;
+    return;
+  }
+  if (btn) btn.disabled = false;
+  renderOps(rep);
+}
+function renderOps(rep) {
+  const sub = document.getElementById('opsSub');
+  const body = document.getElementById('opsBody');
+  if (!rep) { body.innerHTML = '<div class="ins-card">No report yet.</div>'; return; }
+  sub.textContent = `Last checked ${_ago(rep.generated_at)} · ${rep.ok ? 'all systems healthy' : rep.issues.length + ' issue(s)'}`;
+
+  const banner = rep.ok
+    ? `<div class="ins-card" style="border-color:rgba(16,185,129,.4);background:rgba(16,185,129,.06);"><b style="color:#10b981;">✓ All services healthy</b></div>`
+    : `<div class="ins-card" style="border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.06);"><b style="color:#ef4444;">⚠ ${rep.issues.length} issue(s)</b><div style="margin-top:8px;">${rep.issues.map(i => '<div class="kv" style="color:#ef4444;">• ' + escapeHtml(i) + '</div>').join('')}</div></div>`;
+
+  const svcCards = (rep.services || []).map(s => {
+    const verdict = s.healthy ? ['ok','HEALTHY'] : ['bad','CHECK'];
+    const depCls = s.deploy_status === 'live' ? 'ok' : (s.deploy_status === 'no_render_key' ? 'warn' : 'bad');
+    const samples = (s.error_samples || []).map(e => `<div class="errline">${e.code ? '['+e.code+'] ' : ''}${escapeHtml((e.msg||'').slice(0,160))}</div>`).join('');
+    return `<div class="svc ${s.healthy ? '' : 'bad'}">
+      <div class="svc-top"><span class="nm">${escapeHtml(s.name || s.key)}</span>
+        ${s.sport ? `<span class="conv-sport ${s.sport}" style="font-size:10px;">${s.sport}</span>` : ''}
+        <span class="pill-s ${verdict[0]}" style="margin-left:auto;">${verdict[1]}</span></div>
+      <div class="kv">Deploy: <span class="pill-s ${depCls}">${escapeHtml(s.deploy_status||'?')}</span> ${s.deploy_at ? '· '+_ago(s.deploy_at) : ''}</div>
+      ${s.commit ? `<div class="kv">Commit: <b>${escapeHtml(s.commit.id)}</b> — ${escapeHtml(s.commit.message||'')}</div>` : ''}
+      <div class="kv">Live ping: <b>${s.online ? 'online' : 'OFFLINE'}</b> (HTTP ${s.ping_status||'—'}, ${s.ping_ms!=null?s.ping_ms+'ms':'—'})</div>
+      <div class="kv">Recent errors: <b style="color:${s.errors_5xx?'#ef4444':'inherit'};">${s.errors_5xx||0}</b> 5xx · ${s.errors_level||0} error-level${s.log_scan_note?` <span style="opacity:.7;">(${escapeHtml(s.log_scan_note)})</span>`:''}</div>
+      ${samples}
+    </div>`;
+  }).join('');
+
+  const c = rep.cost || {};
+  const sportRows = c.per_sport_share ? Object.entries(c.per_sport_share).map(([sp, v]) =>
+    ({ label: sp[0].toUpperCase()+sp.slice(1) + ` (${v.turns} turns)`, value: v.pct, color: 'var(--sport-'+(sp==='pickleball'?'pickle':sp)+')' })
+  ) : [];
+  const costCard = `<div class="ins-card"><h3>LLM cost — OpenRouter (real spend)</h3>
+    ${c.key_error ? `<div class="kv" style="color:#ca8a04;">${escapeHtml(c.key_error)} — showing estimate only.</div>` : ''}
+    <div class="ins-kpis" style="grid-template-columns:repeat(4,1fr);">
+      <div class="ins-kpi"><div class="n">${_money(c.usage_today)}</div><div class="l">Today</div></div>
+      <div class="ins-kpi"><div class="n">${_money(c.usage_week)}</div><div class="l">This week</div></div>
+      <div class="ins-kpi"><div class="n">${_money(c.usage_month)}</div><div class="l">This month</div></div>
+      <div class="ins-kpi"><div class="n">${_money(c.usage_total)}</div><div class="l">Total (key)</div></div>
+    </div>
+    ${c.account_remaining != null ? `<div class="kv" style="margin-top:10px;">Account credits: <b>${_money(c.account_usage)}</b> used of <b>${_money(c.account_credits)}</b> · <b style="color:#10b981;">${_money(c.account_remaining)}</b> remaining</div>` : ''}
+    <div style="margin-top:14px;"><h3 style="margin-bottom:10px;">Estimated split by sport (this month)</h3>${_barRows(sportRows, { pct: true })}</div>
+    ${sportRows.length ? `<div class="kv" style="margin-top:8px;opacity:.8;">${escapeHtml(c.per_sport_note||'')}</div>` : ''}
+  </div>`;
+
+  body.innerHTML = banner
+    + `<div class="ins-card"><h3>Services — Render deploy · git · liveness · errors</h3><div class="svc-grid">${svcCards}</div></div>`
+    + costCard;
 }
 
 /* ---------- Polling ---------- */

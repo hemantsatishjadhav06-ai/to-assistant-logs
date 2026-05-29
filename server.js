@@ -317,6 +317,18 @@ function appendLogToDisk(entry) {
 
 loadFromDisk();
 
+// ===== Ops Monitor agent (admin-only daily health + LLM-cost watchdog) =====
+// Separate module (ops-monitor.js). Mounted here so it shares admin auth + the
+// in-memory logs, and stays awake to run its daily check.
+try {
+  const createOpsMonitor = require('./ops-monitor');
+  const opsMonitor = createOpsMonitor({ getLogs: () => logs, requireAdmin, dataDir: DATA_DIR });
+  app.use('/api/ops', opsMonitor.router);
+  opsMonitor.start();
+} catch (e) {
+  console.warn('[ops-monitor] failed to start:', e.message);
+}
+
 function resolveAiOn(sport, sessionId) {
   if (sessionId && aiState.perCustomer[sessionId] !== undefined) {
     return { ai_on: aiState.perCustomer[sessionId] === 'on', source: 'session' };
