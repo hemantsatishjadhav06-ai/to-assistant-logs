@@ -639,6 +639,15 @@ function renderDetail() {
   const _wasAtBottom = _prevTb ? (_prevTb.scrollHeight - _prevTb.scrollTop - _prevTb.clientHeight < 48) : true;
   const _prevScroll = _prevTb ? _prevTb.scrollTop : 0;
   const _sameConv = (State._renderedSid === State.selectedSid);
+  // Preserve the in-progress reply draft + focus + caret BEFORE the 3s auto-refresh
+  // blows away the textarea. Without this, typing is interrupted every 3s: the
+  // textarea loses focus and stray keystrokes hit the global shortcuts (h = hand
+  // back to AI, e = close, etc.).
+  const _prevReply = document.getElementById('replyText');
+  const _draft = _prevReply ? _prevReply.value : null;
+  const _replyHadFocus = !!_prevReply && document.activeElement === _prevReply;
+  const _selStart = _prevReply ? _prevReply.selectionStart : null;
+  const _selEnd = _prevReply ? _prevReply.selectionEnd : null;
   if (!State.selectedSid) {
     root.innerHTML = `<div class="empty"><div class="icon">📬</div><h2>Pick a conversation</h2><p>Use <span class="kbd">j</span>/<span class="kbd">k</span> to navigate. Or click any item on the left.</p></div>`;
     return;
@@ -739,6 +748,18 @@ function renderDetail() {
   if (tb) {
     if (!_sameConv || _wasAtBottom) tb.scrollTop = tb.scrollHeight;
     else tb.scrollTop = _prevScroll;
+  }
+  // Restore the reply draft + focus + caret if we're still on the same conversation,
+  // so the 3s auto-refresh never interrupts the agent mid-reply.
+  if (_sameConv && _draft) {
+    const newReply = document.getElementById('replyText');
+    if (newReply && !newReply.disabled) {
+      newReply.value = _draft;
+      if (_replyHadFocus) {
+        newReply.focus();
+        try { newReply.setSelectionRange(_selStart ?? _draft.length, _selEnd ?? _draft.length); } catch (_) {}
+      }
+    }
   }
   State._renderedSid = State.selectedSid;
   // Ack any unread notifications for this session
