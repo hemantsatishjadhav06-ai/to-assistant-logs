@@ -440,6 +440,22 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
 });
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
+// Audit log feed (admin only) — reads the append-only audit.jsonl, newest first.
+app.get('/api/audit', requireAdmin, (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit || '300', 10) || 300, 2000);
+  const entries = [];
+  try {
+    if (fs.existsSync(AUDIT_FILE)) {
+      const lines = fs.readFileSync(AUDIT_FILE, 'utf8').split('\n').filter(Boolean);
+      for (const l of lines.slice(-limit)) { try { entries.push(JSON.parse(l)); } catch (_) {} }
+    }
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+  entries.reverse();
+  res.json({ ok: true, count: entries.length, file: AUDIT_FILE, entries });
+});
+
 // ============================================================
 // BOT-FACING endpoints (require BOT_AUTH_TOKEN)
 // ============================================================
