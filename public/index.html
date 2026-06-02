@@ -12,6 +12,8 @@
   --sport-tennis: #22c55e;
   --sport-padel:  #06b6d4;
   --sport-pickle: #eab308;
+  --sport-badminton: #a855f7;
+  --sport-squash: #f97316;
   --priority-1: #ef4444;
   --priority-2: #f97316;
   --priority-3: #6b7280;
@@ -114,6 +116,8 @@ a { color: inherit; }
 .conv-sport.tennis { background: rgba(34,197,94,.15); color: #22c55e; }
 .conv-sport.padel  { background: rgba(6,182,212,.15);  color: #06b6d4; }
 .conv-sport.pickleball { background: rgba(234,179,8,.18);  color: #eab308; }
+.conv-sport.badminton { background: rgba(168,85,247,.16); color: #a855f7; }
+.conv-sport.squash { background: rgba(249,115,22,.16); color: #f97316; }
 .conv-time { margin-left: auto; color: var(--text-soft); font-size: 12px; }
 .conv-snippet { color: var(--text-muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px; }
 .conv-meta { display:flex; align-items:center; gap: 8px; font-size: 11.5px; }
@@ -231,6 +235,8 @@ a { color: inherit; }
 .day-bars .seg.tennis { background: var(--sport-tennis); }
 .day-bars .seg.padel { background: var(--sport-padel); }
 .day-bars .seg.pickleball { background: var(--sport-pickle); }
+.day-bars .seg.badminton { background: var(--sport-badminton); }
+.day-bars .seg.squash { background: var(--sport-squash); }
 .day-total { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
 .day-lbl { font-size: 10.5px; color: var(--text-soft); margin-top: 6px; white-space: nowrap; transform: rotate(-35deg); transform-origin: center; }
 .svc-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; }
@@ -306,6 +312,8 @@ a { color: inherit; }
       <div class="nav-item" data-sport="tennis" onclick="toggleSportFilter(this)" id="navTennis"><span class="ico" style="color:var(--sport-tennis);">●</span> TennisOutlet <span class="count" id="aiTennis">…</span></div>
       <div class="nav-item" data-sport="padel" onclick="toggleSportFilter(this)" id="navPadel"><span class="ico" style="color:var(--sport-padel);">●</span> PadelOutlet <span class="count" id="aiPadel">…</span></div>
       <div class="nav-item" data-sport="pickleball" onclick="toggleSportFilter(this)" id="navPickle"><span class="ico" style="color:var(--sport-pickle);">●</span> PickleballOutlet <span class="count" id="aiPickle">…</span></div>
+      <div class="nav-item" data-sport="badminton" onclick="toggleSportFilter(this)" id="navBadminton"><span class="ico" style="color:var(--sport-badminton);">●</span> BadmintonOutlet <span class="count" id="aiBadminton">…</span></div>
+      <div class="nav-item" data-sport="squash" onclick="toggleSportFilter(this)" id="navSquash"><span class="ico" style="color:var(--sport-squash);">●</span> SquashOutlet <span class="count" id="aiSquash">…</span></div>
     </div>
     <div class="nav-section">
       <div class="nav-label">Service</div>
@@ -328,6 +336,8 @@ a { color: inherit; }
       <span class="chip" data-sport="tennis" onclick="onSportChip(this)"><span class="swatch" style="background:var(--sport-tennis);"></span>Tennis</span>
       <span class="chip" data-sport="padel" onclick="onSportChip(this)"><span class="swatch" style="background:var(--sport-padel);"></span>Padel</span>
       <span class="chip" data-sport="pickleball" onclick="onSportChip(this)"><span class="swatch" style="background:var(--sport-pickle);"></span>Pickleball</span>
+      <span class="chip" data-sport="badminton" onclick="onSportChip(this)"><span class="swatch" style="background:var(--sport-badminton);"></span>Badminton</span>
+      <span class="chip" data-sport="squash" onclick="onSportChip(this)"><span class="swatch" style="background:var(--sport-squash);"></span>Squash</span>
     </div>
     <div class="conv-list" id="convList"></div>
   </section>
@@ -697,6 +707,8 @@ function render() {
   document.getElementById('aiTennis').textContent = State.aiState.global.tennis === 'off' ? 'OFF' : 'ON';
   document.getElementById('aiPadel').textContent  = State.aiState.global.padel  === 'off' ? 'OFF' : 'ON';
   document.getElementById('aiPickle').textContent = State.aiState.global.pickleball === 'off' ? 'OFF' : 'ON';
+  document.getElementById('aiBadminton').textContent = State.aiState.global.badminton === 'off' ? 'OFF' : 'ON';
+  document.getElementById('aiSquash').textContent = State.aiState.global.squash === 'off' ? 'OFF' : 'ON';
   // Notif badge
   const badge = document.getElementById('notifBadge');
   if (unclaimed > 0) badge.classList.remove('zero'); else badge.classList.add('zero');
@@ -721,7 +733,7 @@ function render() {
       const last = c.last_msg;
       const snippet = (last && (last.user_query || last.ai_response) || '').replace(/\s+/g,' ').slice(0, 80);
       const isSel = c.session_id === State.selectedSid;
-      const sportClass = ['tennis','padel','pickleball'].includes(c.sport) ? c.sport : '';
+      const sportClass = ['tennis','padel','pickleball','badminton','squash'].includes(c.sport) ? c.sport : '';
       return `
         <div class="conv ${isSel ? 'selected':''}" onclick="selectConv('${c.session_id}')">
           <div class="conv-row1">
@@ -772,7 +784,7 @@ function renderDetail() {
   const aiOn = ai === 'on';   // FIX: was referenced at the AI toggle button (was a ReferenceError
                               // because aiOn only existed as a local inside statusFor()). The throw
                               // aborted renderDetail() so the chat thread never rendered.
-  const sportClass = ['tennis','padel','pickleball'].includes(c.sport) ? c.sport : '';
+  const sportClass = ['tennis','padel','pickleball','badminton','squash'].includes(c.sport) ? c.sport : '';
   const me = (State.agent.agent_name || '').toLowerCase();
   const isMine = s.kind === 'claimed' && (s.who||'').toLowerCase() === me;
   const replyDisabled = !isMine && s.kind !== 'unclaimed';
@@ -1149,8 +1161,8 @@ async function renderInsights() {
     logs = r.logs || [];
   } catch (e) { sub.textContent = 'Could not load logs.'; return; }
 
-  const SPORTS = ['tennis','padel','pickleball'];
-  const sportColor = { tennis:'var(--sport-tennis)', padel:'var(--sport-padel)', pickleball:'var(--sport-pickle)' };
+  const SPORTS = ['tennis','padel','pickleball','badminton','squash'];
+  const sportColor = { tennis:'var(--sport-tennis)', padel:'var(--sport-padel)', pickleball:'var(--sport-pickle)', badminton:'var(--sport-badminton)', squash:'var(--sport-squash)' };
 
   // ----- group into conversations -----
   const convs = new Map();
@@ -1178,7 +1190,7 @@ async function renderInsights() {
   for (let i = 13; i >= 0; i--) {
     const d = new Date(today); d.setDate(d.getDate() - i);
     const k = dayKey(d);
-    const rec = { key: k, label: (d.getMonth()+1) + '/' + d.getDate(), tennis:0, padel:0, pickleball:0, total:0 };
+    const rec = { key: k, label: (d.getMonth()+1) + '/' + d.getDate(), tennis:0, padel:0, pickleball:0, badminton:0, squash:0, total:0 };
     idx[k] = rec; days.push(rec);
   }
   for (const l of logs) {
@@ -1245,6 +1257,8 @@ async function renderInsights() {
         <span><i style="background:var(--sport-tennis);"></i>Tennis</span>
         <span><i style="background:var(--sport-padel);"></i>Padel</span>
         <span><i style="background:var(--sport-pickle);"></i>Pickleball</span>
+        <span><i style="background:var(--sport-badminton);"></i>Badminton</span>
+        <span><i style="background:var(--sport-squash);"></i>Squash</span>
       </div>
     </div>
 

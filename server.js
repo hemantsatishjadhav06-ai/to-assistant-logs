@@ -228,7 +228,7 @@ const startTime = new Date();
 // must explicitly toggle a customer or sport off. This is locked in by
 // merging persisted state ON TOP of defaults rather than replacing them.
 const aiState = {
-  global: { tennis: 'on', padel: 'on', pickleball: 'on' },  // DEFAULT: ON
+  global: { tennis: 'on', padel: 'on', pickleball: 'on', badminton: 'on', squash: 'on' },  // DEFAULT: ON
   perCustomer: {}  // empty by default — every new session inherits global=on
 };
 const pendingReplies = {};
@@ -653,7 +653,7 @@ app.post('/api/toggle', requireAgent, (req, res) => {
   if (!id) return res.status(400).json({ ok: false, error: 'id required' });
   const _before = scope === 'global' ? aiState.global[id] : aiState.perCustomer[id];
   if (scope === 'global') {
-    if (!['tennis', 'padel', 'pickleball'].includes(id)) return res.status(400).json({ ok: false, error: 'bad sport' });
+    if (!['tennis', 'padel', 'pickleball', 'badminton', 'squash'].includes(id)) return res.status(400).json({ ok: false, error: 'bad sport' });
     aiState.global[id] = value;
   } else {
     aiState.perCustomer[id] = value;
