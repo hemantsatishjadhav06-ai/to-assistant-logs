@@ -317,6 +317,105 @@ function appendLogToDisk(entry) {
 
 loadFromDisk();
 
+// ============================================================
+// Canned replies (v4.3) — disk-backed, admin-editable
+// ============================================================
+// Agents pull these into the reply box via inline autocomplete + the ⌘/ palette.
+// Seeded from DEFAULT_CANNED on first boot, then persisted to canned.json so admin
+// edits survive restarts (and redeploys when a Render disk is mounted at DATA_DIR).
+const CANNED_FILE = path.join(DATA_DIR, 'canned.json');
+const DEFAULT_CANNED = [
+  // Greeting & conversation flow
+  { category: 'Greeting', label: 'Opening', triggers: ['open', 'opening', 'hi', 'hello', 'welcome', 'greet'], body: `Welcome to Tennisoutlet. How may I help you?` },
+  { category: 'Greeting', label: 'Additional help', triggers: ['additional', 'anythingelse', 'more', 'else'], body: `Is there anything else I can assist you with?` },
+  { category: 'Greeting', label: 'Closing — great day', triggers: ['close', 'closing', 'bye', 'day', 'thanksday'], body: `Thank you for contacting Tennisoutlet. Have a great day!` },
+  { category: 'Greeting', label: 'Closing — great weekend', triggers: ['weekend', 'closeweekend', 'byeweekend'], body: `Thank you for contacting Tennisoutlet. Have a great weekend!` },
+  { category: 'Greeting', label: 'Hold', triggers: ['hold', 'wait', 'moment'], body: `Please be here for a moment, will get back to you with required details.` },
+  { category: 'Greeting', label: 'Retrieve hold', triggers: ['retrieve', 'unhold', 'thankshold', 'back'], body: `Thank you for being here.` },
+  // General
+  { category: 'General', label: 'General terms', triggers: ['absolutely', 'sure', 'assist', 'happy'], body: `Absolutely! I'll be happy to assist you with that.` },
+  { category: 'General', label: 'Particular issue feedback', triggers: ['issuefeedback', 'noted', 'escalate'], body: `Noted, I'll pass your feedback to the relevant team and ensure it is resolved at the earliest.` },
+  { category: 'General', label: 'General feedback', triggers: ['feedback', 'appreciate', 'improve'], body: `Your feedback is highly appreciated and will help us improve our services.` },
+  { category: 'General', label: 'Apology', triggers: ['apology', 'apologize', 'sorry', 'inconvenience'], body: `I'm genuinely sorry for the inconvenience you've experienced, and I'm here to make things right for you.` },
+  // Product
+  { category: 'Product', label: 'Product inquiry', triggers: ['product', 'inquiry', 'specify', 'whichproduct'], body: `Could you specify the product you're interested in?` },
+  { category: 'Product', label: 'Product authenticity', triggers: ['authentic', 'authenticity', 'genuine', 'original', 'fake'], body: `All our products are 100% authentic and sourced directly from the brand or their authorized distributors.` },
+  { category: 'Product', label: 'Warranty', triggers: ['warranty', 'warr', 'guarantee'], body: `Most of the products that we sell are covered under our unique WARRANTY PROMISE policy. For more details visit - https://tennisoutlet.in/warranty-promise` },
+  { category: 'Product', label: 'Availability check', triggers: ['availability', 'available', 'instock', 'checkstock'], body: `Thank you for your inquiry. I'll promptly check the availability of the requested product and confirm you shortly.` },
+  { category: 'Product', label: 'Out of stock', triggers: ['oos', 'outofstock', 'nostock', 'unavailable'], body: `Currently the product is not in stock however I will share the feedback with our concern team.` },
+  // Orders & shipping
+  { category: 'Orders', label: 'Order related — confirm number', triggers: ['order', 'orderrelated', 'registered', 'mobile'], body: `Sure, I'd be happy to help with your order. Is the number provided here your registered mobile number?` },
+  { category: 'Orders', label: 'Request order details', triggers: ['orderdetails', 'orderid', 'reqorder', 'sharedetails'], body: `Sure, I'd be happy to help with your order. Can you please share your order ID or registered mobile number?` },
+  { category: 'Orders', label: 'Delay in shipping', triggers: ['delay', 'shippingdelay', 'late'], body: `Sincere apologies for the delay, we will follow up with our delivery partner and ensure the product reach you at the earliest.` },
+  { category: 'Orders', label: 'Shipping TAT — delivery window', triggers: ['tat', 'shippingtat', 'deliverytime', 'howlong'], body: `You can typically expect to receive your order within 2-5 business days, depending on the city.` },
+  { category: 'Orders', label: 'Shipping TAT — dispatch', triggers: ['dispatch', 'processing', 'dispatchtat'], body: `Orders are processed and dispatched within 8 hours of receipt. Delivery times may vary between 1 to 3 business days depending on the city.` },
+  { category: 'Orders', label: 'Tracking — request details', triggers: ['track', 'tracking', 'trackorder', 'wheremyorder'], body: `Could you please provide your registered mobile number or order ID for assistance in tracking your shipment.` },
+  { category: 'Orders', label: 'Tracking — share details', triggers: ['trackingdetails', 'sharetracking', 'trackinginfo'], body: `Here's the tracking information for your order. Alternatively, you can also view it by logging into your account.` },
+  { category: 'Orders', label: 'Change address — ask', triggers: ['address', 'changeaddress', 'newaddress', 'updateaddress'], body: `Could you please provide the new shipping address you want to change to?` },
+  { category: 'Orders', label: 'Change address — done', triggers: ['addressupdated', 'addressdone'], body: `Thanks! Your shipping address has been updated.` },
+  // Payments
+  { category: 'Payments', label: 'Payment methods', triggers: ['payment', 'pay', 'methods', 'upi', 'cod', 'card'], body: `We accept multiple payment methods including credit/debit cards, net banking, UPI, EMI and cash on delivery.` },
+  { category: 'Payments', label: 'EMI', triggers: ['emi', 'installment'], body: `We're in the process of enabling the EMI payment option, which is anticipated to be live within a week.` },
+  // Returns & refunds
+  { category: 'Returns', label: 'Return policy', triggers: ['returnpolicy', 'returns', 'return'], body: `We offer 30-day hassle-free return policy. Please visit https://tennisoutlet.in/return-cancellation-policy for details.\nOn Racquets, we offer a unique Play & Return policy, wherein you can order a racquet, play with it and return if it doesn't suit you. For more details visit https://tennisoutlet.in/play-return-program` },
+  { category: 'Returns', label: 'Return reason', triggers: ['returnreason', 'reason', 'whyreturn'], body: `Could you kindly specify the reason for your return?` },
+  { category: 'Returns', label: 'Return & exchange', triggers: ['exchange', 'returnexchange', 'unused', 'tags'], body: `You can return or exchange a product if it is in an unused condition with all stickers and tags intact. For more info please refer https://tennisoutlet.in/return-cancellation-policy` },
+  { category: 'Returns', label: 'Play & Return', triggers: ['play', 'playreturn', 'tryracquet', 'demo'], body: `We provide a hassle-free play and return policy, allowing you to try out the racquet and return it within 5 days if needed. For more details, please visit: https://tennisoutlet.in/play-return-program` },
+  { category: 'Returns', label: 'Refund', triggers: ['refund', 'money', 'wallet', 'creditback'], body: `Refunds are processed within 48 hours after receiving the product. However, the banks may take up to 5 business days to credit into your account. If you opt to receive the refund in your TO wallet, it is credited instantly.` },
+  // Promotions
+  { category: 'Promotions', label: 'First-time discount', triggers: ['promo', 'discount', 'offer', 'firsttime'], body: `We're currently offering a 15% discount on first-time purchases, with savings of up to 500/- RS.` },
+  { category: 'Promotions', label: 'Coupon email', triggers: ['coupon', 'couponemail', 'flat5', 'exclusive'], body: `Dear Sir,\nGreetings from Tennisoutlet.in!\nWe're excited to extend an exclusive flat 5% discount on your total cart value without any capped amount, simply enter the coupon code "XXXXX" at checkout to redeem your discount today, which is exclusively made for you.\nAt TennisOutlet.in, we're dedicated to providing you with top-quality tennis gear and accessories to enhance your game.\nShould you have any questions or require assistance, our dedicated customer support team is here to help. Feel free to reach out to us at any time.` },
+];
+let canned = [];
+let cannedSeq = 0;
+function normTriggers(t) {
+  const arr = Array.isArray(t) ? t : String(t || '').split(',');
+  return Array.from(new Set(
+    arr.map(s => String(s).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '')).filter(Boolean)
+  )).slice(0, 24);
+}
+function sanitizeCanned(c) {
+  return {
+    id: String(c.id),
+    category: String(c.category || 'General').trim().slice(0, 40) || 'General',
+    label: String(c.label || '').trim().slice(0, 80),
+    triggers: normTriggers(c.triggers),
+    body: String(c.body || '').slice(0, 8000)
+  };
+}
+let cannedSaveTimer = null;
+function saveCannedNow() {
+  try {
+    const tmp = CANNED_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(canned, null, 2));
+    fs.renameSync(tmp, CANNED_FILE);
+  } catch (e) { console.warn('[canned] save failed:', e.message); }
+}
+function saveCannedDebounced() {
+  if (cannedSaveTimer) clearTimeout(cannedSaveTimer);
+  cannedSaveTimer = setTimeout(saveCannedNow, 300);
+}
+function loadCanned() {
+  if (fs.existsSync(CANNED_FILE)) {
+    try {
+      const arr = JSON.parse(fs.readFileSync(CANNED_FILE, 'utf8'));
+      if (Array.isArray(arr) && arr.length) {
+        canned = arr.map(sanitizeCanned).filter(c => c.label && c.body);
+        for (const c of canned) {
+          const n = parseInt(String(c.id).replace(/\D/g, ''), 10);
+          if (n > cannedSeq) cannedSeq = n;
+        }
+        console.log(`[canned] loaded ${canned.length} canned replies from disk`);
+        return;
+      }
+    } catch (e) { console.warn('[canned] load failed, reseeding:', e.message); }
+  }
+  canned = DEFAULT_CANNED.map(c => sanitizeCanned(Object.assign({ id: 'c' + (++cannedSeq) }, c)));
+  saveCannedNow();
+  console.log(`[canned] seeded ${canned.length} default canned replies`);
+}
+loadCanned();
+
 // ===== Ops Monitor agent (admin-only daily health + LLM-cost watchdog) =====
 // Separate module (ops-monitor.js). Mounted here so it shares admin auth + the
 // in-memory logs, and stays awake to run its daily check.
@@ -438,6 +537,50 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
   audit(req, 'delete_user', id, { name: u.name, role: u.role }, null);
   res.json({ ok: true });
 });
+// ===== Canned replies API (v4.3) =====
+// Reading is agent-level (any signed-in agent uses them in the reply box).
+// Create / update / delete are admin-only and audit-logged.
+app.get('/api/canned', requireAgent, (req, res) => {
+  res.json({ ok: true, canned });
+});
+app.post('/api/canned', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  const c = sanitizeCanned({ id: 'c' + (++cannedSeq), category: b.category, label: b.label, triggers: b.triggers, body: b.body });
+  if (!c.label || !c.body) return res.status(400).json({ ok: false, error: 'label_and_body_required' });
+  canned.push(c);
+  saveCannedDebounced();
+  audit(req, 'canned_create', c.id, null, { label: c.label, category: c.category });
+  res.json({ ok: true, canned: c });
+});
+app.put('/api/canned/:id', requireAdmin, (req, res) => {
+  const id = String(req.params.id || '');
+  const idx = canned.findIndex(c => c.id === id);
+  if (idx < 0) return res.status(404).json({ ok: false, error: 'not_found' });
+  const b = req.body || {};
+  const before = canned[idx];
+  const updated = sanitizeCanned({
+    id,
+    category: b.category !== undefined ? b.category : before.category,
+    label: b.label !== undefined ? b.label : before.label,
+    triggers: b.triggers !== undefined ? b.triggers : before.triggers,
+    body: b.body !== undefined ? b.body : before.body
+  });
+  if (!updated.label || !updated.body) return res.status(400).json({ ok: false, error: 'label_and_body_required' });
+  canned[idx] = updated;
+  saveCannedDebounced();
+  audit(req, 'canned_update', id, { label: before.label }, { label: updated.label });
+  res.json({ ok: true, canned: updated });
+});
+app.delete('/api/canned/:id', requireAdmin, (req, res) => {
+  const id = String(req.params.id || '');
+  const idx = canned.findIndex(c => c.id === id);
+  if (idx < 0) return res.status(404).json({ ok: false, error: 'not_found' });
+  const [removed] = canned.splice(idx, 1);
+  saveCannedDebounced();
+  audit(req, 'canned_delete', id, { label: removed.label }, null);
+  res.json({ ok: true });
+});
+
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
 // Audit log feed (admin only) — reads the append-only audit.jsonl, newest first.

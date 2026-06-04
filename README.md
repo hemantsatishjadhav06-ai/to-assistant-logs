@@ -19,6 +19,10 @@ Each bot fires a non-blocking POST to `/log` after every user query + AI respons
 | `GET`    | `/api/health` | Service health + buffer stats |
 | `GET`    | `/debug/test?sport=tennis` | Inject a synthetic log row |
 | `DELETE` | `/api/logs` | Wipe all logs (header `X-Admin-Key` must match `ADMIN_KEY` env var) |
+| `GET`    | `/api/canned` | List canned replies (agent session) |
+| `POST`   | `/api/canned` | Create a canned reply (admin only) |
+| `PUT`    | `/api/canned/:id` | Update a canned reply (admin only) |
+| `DELETE` | `/api/canned/:id` | Delete a canned reply (admin only) |
 
 ## Dashboard features
 
@@ -28,6 +32,7 @@ Each bot fires a non-blocking POST to `/log` after every user query + AI respons
 - **Source filter** — AI bot only / Human agent (Zoho) only / All.
 - **Search** — full-text across query, response, intent, session ID.
 - **Compact table view** — toggle for power users who prefer dense rows.
+- **Canned replies** — in the reply box, type a keyword (e.g. `warranty`, `track`, `refund`) for an inline suggestion (↹ Tab to insert), or press ⌘/ for the full searchable palette. Manage the list in **/admin** (admins). Seeded with the standard Tennisoutlet replies; stored in `canned.json` in the data dir.
 
 ## Setting up Zoho SalesIQ → /zoho webhook
 

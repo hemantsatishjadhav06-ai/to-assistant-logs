@@ -78,6 +78,30 @@
     <div class="hint">Note: profiles created here last until the next redeploy unless a persistent disk is attached. The seeded admin + agents always survive.</div>
     <div class="msg" id="msg"></div>
   </div>
+
+  <div class="card">
+    <h2>Canned replies</h2>
+    <p class="hint" style="margin-top:-8px;margin-bottom:14px;">These power the reply-box autocomplete and the ⌘/ palette in the agent console. Agents type a trigger keyword and the full message is inserted.</p>
+    <table>
+      <thead><tr><th>Category</th><th>Label</th><th>Triggers</th><th>Message</th><th></th></tr></thead>
+      <tbody id="cannedRows"><tr><td colspan="5" style="color:var(--muted);">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 id="cannedFormTitle">Add a canned reply</h2>
+    <input type="hidden" id="c_id" />
+    <div class="grid">
+      <div><label for="c_category">Category</label><input id="c_category" placeholder="e.g. Orders" autocomplete="off" /></div>
+      <div><label for="c_label">Label</label><input id="c_label" placeholder="e.g. Tracking — request details" autocomplete="off" /></div>
+    </div>
+    <div style="margin-top:14px;"><label for="c_triggers">Trigger keywords (comma-separated)</label><input id="c_triggers" placeholder="e.g. track, tracking, trackorder" autocomplete="off" /></div>
+    <div style="margin-top:14px;"><label for="c_body">Message</label><textarea id="c_body" rows="5" placeholder="The full reply that gets inserted…" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-size:14px;font-family:inherit;resize:vertical;background:#fff;color:var(--text);"></textarea></div>
+    <button class="btn-primary" id="cannedSaveBtn">Add canned reply</button>
+    <button class="btn-del" id="cannedCancelBtn" style="margin-left:8px;display:none;">Cancel edit</button>
+    <div class="hint">Edits persist across restarts; they survive a redeploy only when a persistent disk is attached. The default Tennisoutlet set re-seeds automatically if the store is ever empty.</div>
+    <div class="msg" id="cmsg"></div>
+  </div>
 </div>
 
 <script>
@@ -127,6 +151,83 @@ document.getElementById('createBtn').addEventListener('click', async function ()
     showMsg(map[d.error] || ('Could not create: ' + (d.error || r.status)), false);
   }
 });
+/* ----- Canned replies management ----- */
+let _editingCannedId = null;
+let _cannedCache = [];
+function cmsg(text, ok) {
+  const m = document.getElementById('cmsg');
+  m.textContent = text; m.className = 'msg show ' + (ok ? 'ok' : 'err');
+}
+function escAdmin(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+async function loadCannedAdmin() {
+  let d;
+  try { const r = await api('/api/canned'); if (!r.ok) throw new Error(r.status); d = await r.json(); }
+  catch (e) { document.getElementById('cannedRows').innerHTML = '<tr><td colspan="5">Could not load canned replies.</td></tr>'; return; }
+  _cannedCache = d.canned || [];
+  const rows = _cannedCache.map(cannedRowHtml).join('');
+  document.getElementById('cannedRows').innerHTML = rows || '<tr><td colspan="5" style="color:var(--muted);">No canned replies yet.</td></tr>';
+}
+function cannedRowHtml(c) {
+  const trig = (c.triggers || []).slice(0, 4).join(', ');
+  const full = (c.body || '').replace(/\s+/g, ' ');
+  const preview = full.slice(0, 70);
+  return '<tr>' +
+    '<td>' + escAdmin(c.category) + '</td>' +
+    '<td><b>' + escAdmin(c.label) + '</b></td>' +
+    '<td style="font-size:12px;color:var(--muted);">' + escAdmin(trig) + '</td>' +
+    '<td style="font-size:12px;color:var(--muted);max-width:240px;">' + escAdmin(preview) + (full.length > 70 ? '…' : '') + '</td>' +
+    '<td style="white-space:nowrap;text-align:right;">' +
+      '<button class="btn-del" style="color:var(--brand-deep);border-color:#e3d28a;" onclick="editCanned(\'' + c.id + '\')">Edit</button> ' +
+      '<button class="btn-del" onclick="delCanned(\'' + c.id + '\')">Remove</button>' +
+    '</td></tr>';
+}
+function editCanned(id) {
+  const c = _cannedCache.find(x => x.id === id);
+  if (!c) return;
+  _editingCannedId = id;
+  document.getElementById('c_id').value = id;
+  document.getElementById('c_category').value = c.category || '';
+  document.getElementById('c_label').value = c.label || '';
+  document.getElementById('c_triggers').value = (c.triggers || []).join(', ');
+  document.getElementById('c_body').value = c.body || '';
+  document.getElementById('cannedFormTitle').textContent = 'Edit canned reply';
+  document.getElementById('cannedSaveBtn').textContent = 'Save changes';
+  document.getElementById('cannedCancelBtn').style.display = '';
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+function cancelEditCanned() {
+  _editingCannedId = null;
+  ['c_id','c_category','c_label','c_triggers','c_body'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('cannedFormTitle').textContent = 'Add a canned reply';
+  document.getElementById('cannedSaveBtn').textContent = 'Add canned reply';
+  document.getElementById('cannedCancelBtn').style.display = 'none';
+  document.getElementById('cmsg').className = 'msg';
+}
+async function saveCanned() {
+  const payload = {
+    category: document.getElementById('c_category').value.trim(),
+    label: document.getElementById('c_label').value.trim(),
+    triggers: document.getElementById('c_triggers').value.split(',').map(s => s.trim()).filter(Boolean),
+    body: document.getElementById('c_body').value
+  };
+  if (!payload.label || !payload.body.trim()) { cmsg('Label and message are required.', false); return; }
+  let r;
+  if (_editingCannedId) r = await api('/api/canned/' + encodeURIComponent(_editingCannedId), { method: 'PUT', body: JSON.stringify(payload) });
+  else r = await api('/api/canned', { method: 'POST', body: JSON.stringify(payload) });
+  const d = await r.json().catch(() => ({}));
+  if (r.ok && d.ok) { cmsg(_editingCannedId ? 'Saved changes.' : 'Added canned reply.', true); cancelEditCanned(); loadCannedAdmin(); }
+  else cmsg('Could not save: ' + (d.error || r.status), false);
+}
+async function delCanned(id) {
+  if (!confirm('Remove this canned reply?')) return;
+  const r = await api('/api/canned/' + encodeURIComponent(id), { method: 'DELETE' });
+  const d = await r.json().catch(() => ({}));
+  if (r.ok && d.ok) { cmsg('Removed.', true); loadCannedAdmin(); }
+  else cmsg('Could not remove: ' + (d.error || r.status), false);
+}
+document.getElementById('cannedSaveBtn').addEventListener('click', saveCanned);
+document.getElementById('cannedCancelBtn').addEventListener('click', cancelEditCanned);
+
 (async function init() {
   let me;
   try { const r = await api('/api/me'); me = r.ok ? await r.json() : null; } catch (e) { me = null; }
@@ -138,6 +239,7 @@ document.getElementById('createBtn').addEventListener('click', async function ()
   document.getElementById('gate').style.display = 'none';
   document.getElementById('app').style.display = 'grid';
   loadUsers();
+  loadCannedAdmin();
 })();
 </script>
 </body>
