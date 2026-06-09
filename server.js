@@ -321,6 +321,15 @@ function appendLogToDisk(entry) {
   });
 }
 
+// ----- Rewrite the whole logs file from the in-memory array (used after a purge) -----
+function rewriteLogsFile() {
+  try {
+    const tmp = LOGS_FILE + '.tmp';
+    fs.writeFileSync(tmp, logs.map(e => JSON.stringify(e)).join('\n') + (logs.length ? '\n' : ''));
+    fs.renameSync(tmp, LOGS_FILE);
+  } catch (e) { console.warn('[persist] rewrite logs failed:', e.message); }
+}
+
 loadFromDisk();
 
 // ============================================================
@@ -477,6 +486,19 @@ function pushLog(entry) {
   totalReceived = Math.max(totalReceived + 1, entry.id);
   while (logs.length > MAX_ENTRIES) logs.shift();
   appendLogToDisk(entry);
+}
+
+// Classify a session id as automated test/QA/dev traffic (not a real customer chat).
+// Production chat-widget sessions look like c_<base36>_<rand> (underscores, no hyphens).
+// Anything that isn't that shape — qa-*, final-*, smoke-*, verify-*, ip:*, debug, etc. —
+// is treated as synthetic. Empty/unknown session ids are left ALONE (could be real).
+function isTestSession(sid) {
+  sid = sid || '';
+  if (!sid) return false;
+  if (sid === 'debug') return true;
+  if (/^ip:/i.test(sid)) return true;
+  if (/^c_[a-z0-9]+(_[a-z0-9]+)*$/.test(sid)) return false;
+  return true;
 }
 
 // ============================================================
@@ -690,6 +712,25 @@ app.post('/api/transfer', requireAgent, (req, res) => {
   audit(req, 'transfer', session_id, null, { to: target.name, by: from });
   console.log(`[transfer] ${session_id} ${from} -> ${target.name}`);
   res.json({ ok: true, to: { id: target.id, name: target.name } });
+});
+
+// ===== Test-data cleanup (v4.5, admin only) =====
+// Summary drives the cleanup UI; purge is destructive and confirm-gated.
+app.get('/api/logs/test-summary', requireAdmin, (req, res) => {
+  let entries = 0; const sess = new Set();
+  for (const l of logs) if (isTestSession(l.session_id)) { entries++; sess.add(l.session_id); }
+  res.json({ ok: true, test_entries: entries, test_sessions: sess.size, total: logs.length, sample: Array.from(sess).slice(0, 30) });
+});
+app.post('/api/logs/purge-test', requireAdmin, (req, res) => {
+  if (!req.body || req.body.confirm !== true) return res.status(400).json({ ok: false, error: 'confirm_required' });
+  const before = logs.length;
+  const kept = logs.filter(l => !isTestSession(l.session_id));
+  const removed = before - kept.length;
+  logs.length = 0; logs.push(...kept);
+  rewriteLogsFile();
+  audit(req, 'purge_test_logs', 'logs', { before }, { removed, remaining: logs.length });
+  console.log(`[purge] removed ${removed} test entries (by ${req.agent.agent_name})`);
+  res.json({ ok: true, removed, remaining: logs.length });
 });
 
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));

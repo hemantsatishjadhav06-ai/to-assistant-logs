@@ -102,6 +102,16 @@
     <div class="hint">Edits persist across restarts; they survive a redeploy only when a persistent disk is attached. The default Tennisoutlet set re-seeds automatically if the store is ever empty.</div>
     <div class="msg" id="cmsg"></div>
   </div>
+
+  <div class="card">
+    <h2>Clean up test data</h2>
+    <p class="hint" style="margin-top:-8px;margin-bottom:14px;">Automated QA / CI / test conversations (sessions like <code>qa-*</code>, <code>final-*</code>, <code>smoke-*</code>, <code>verify-*</code>, <code>ip:*</code>, <code>debug</code>) pollute the live logs. This removes them permanently. Real customer chats (<code>c_…</code> sessions) and un-keyed entries are kept.</p>
+    <div id="testSummary" style="font-size:14px;margin-bottom:14px;color:var(--muted);">Scanning…</div>
+    <button class="btn-primary" id="purgeBtn" style="background:#c0392b;color:#fff;">Purge test data</button>
+    <button class="btn-del" id="rescanBtn" style="margin-left:8px;color:var(--muted);border-color:var(--border);">Rescan</button>
+    <div class="hint">Permanent — it rewrites the on-disk log and cannot be undone.</div>
+    <div class="msg" id="pmsg"></div>
+  </div>
 </div>
 
 <script>
@@ -228,6 +238,33 @@ async function delCanned(id) {
 document.getElementById('cannedSaveBtn').addEventListener('click', saveCanned);
 document.getElementById('cannedCancelBtn').addEventListener('click', cancelEditCanned);
 
+/* ----- Test-data cleanup ----- */
+function pmsg(t, ok) { const m = document.getElementById('pmsg'); m.textContent = t; m.className = 'msg show ' + (ok ? 'ok' : 'err'); }
+async function loadTestSummary() {
+  const el = document.getElementById('testSummary');
+  try {
+    const r = await api('/api/logs/test-summary'); if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    el.innerHTML = '<b style="color:var(--text);font-size:20px;">' + d.test_entries + '</b> test entries across <b>' + d.test_sessions + '</b> sessions <span style="opacity:.7;">(of ' + d.total + ' total)</span>.';
+    document.getElementById('purgeBtn').disabled = !d.test_entries;
+  } catch (e) { el.textContent = 'Could not load test-data summary.'; }
+}
+async function purgeTest() {
+  let count = '?';
+  try { const r0 = await api('/api/logs/test-summary'); if (r0.ok) count = (await r0.json()).test_entries; } catch (e) {}
+  if (!confirm('Permanently delete ' + count + ' test entries?\n\nThis rewrites the log on disk and cannot be undone. Real customer chats are kept.')) return;
+  const btn = document.getElementById('purgeBtn'); btn.disabled = true;
+  try {
+    const r = await api('/api/logs/purge-test', { method: 'POST', body: JSON.stringify({ confirm: true }) });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) { pmsg('Removed ' + d.removed + ' test entries. ' + d.remaining + ' real entries remain.', true); loadTestSummary(); }
+    else pmsg('Purge failed: ' + (d.error || r.status), false);
+  } catch (e) { pmsg('Purge failed: ' + e.message, false); }
+  finally { btn.disabled = false; }
+}
+document.getElementById('purgeBtn').addEventListener('click', purgeTest);
+document.getElementById('rescanBtn').addEventListener('click', loadTestSummary);
+
 (async function init() {
   let me;
   try { const r = await api('/api/me'); me = r.ok ? await r.json() : null; } catch (e) { me = null; }
@@ -240,6 +277,7 @@ document.getElementById('cannedCancelBtn').addEventListener('click', cancelEditC
   document.getElementById('app').style.display = 'grid';
   loadUsers();
   loadCannedAdmin();
+  loadTestSummary();
 })();
 </script>
 </body>

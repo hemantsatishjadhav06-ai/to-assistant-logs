@@ -348,6 +348,7 @@ a { color: inherit; }
       <div class="nav-item" data-filter="mine" onclick="setFilter(this)"><span class="ico">⭐</span> Mine <span class="count" id="cntMine">0</span></div>
       <div class="nav-item" data-filter="all" onclick="setFilter(this)"><span class="ico">💬</span> All <span class="count" id="cntAll">0</span></div>
       <div class="nav-item" data-filter="closed" onclick="setFilter(this)"><span class="ico">✅</span> Closed <span class="count" id="cntClosed">0</span></div>
+      <div class="nav-item" id="navHideTest" onclick="toggleHideTest()" title="Hide automated test / QA conversations from the list"><span class="ico">🧪</span> Hide test data <span class="count" id="hideTestState">ON</span></div>
     </div>
     <div class="nav-section">
       <div class="nav-label">Stores · global AI</div>
@@ -522,6 +523,7 @@ const State = {
   inboxFilter: 'unclaimed',
   agents: [],
   assignments: {},
+  hideTest: (localStorage.getItem('os.hideTest') !== 'off'),
   search: '',
   pollTimer: null,
   pollErrors: 0,
@@ -765,6 +767,27 @@ function ageLabel(ts) {
   if (h < 24) return h + ' h';
   return Math.floor(h/24) + ' d';
 }
+/* ---------- Hide automated test / QA conversations ---------- */
+function isTestSession(sid) {
+  sid = sid || '';
+  if (!sid) return false;
+  if (sid === 'debug') return true;
+  if (/^ip:/i.test(sid)) return true;
+  if (/^c_[a-z0-9]+(_[a-z0-9]+)*$/.test(sid)) return false;
+  return true;
+}
+function visibleConvos() {
+  return State.hideTest ? State.conversations.filter(c => !isTestSession(c.session_id)) : State.conversations;
+}
+function toggleHideTest() {
+  State.hideTest = !State.hideTest;
+  localStorage.setItem('os.hideTest', State.hideTest ? 'on' : 'off');
+  const el = document.getElementById('hideTestState'); if (el) el.textContent = State.hideTest ? 'ON' : 'OFF';
+  if (State.selectedSid && State.hideTest && isTestSession(State.selectedSid)) State.selectedSid = null;
+  render();
+  toast(State.hideTest ? 'Hiding test / QA conversations' : 'Showing all conversations', 'ok');
+}
+
 function applyFilters(list) {
   return list.filter(c => {
     if (State.sportFilter !== 'all' && c.sport !== State.sportFilter) return false;
@@ -785,8 +808,8 @@ function applyFilters(list) {
 
 /* ---------- Render ---------- */
 function render() {
-  // Sidebar counts
-  const all = State.conversations;
+  // Sidebar counts (respect the Hide-test-data toggle)
+  const all = visibleConvos();
   const unclaimed = all.filter(c => statusFor(c).kind === 'unclaimed').length;
   const me = (State.agent.agent_name || '').toLowerCase();
   const mine = all.filter(c => { const s = statusFor(c); return s.kind === 'claimed' && (s.who||'').toLowerCase() === me; }).length;
@@ -797,6 +820,7 @@ function render() {
   document.getElementById('cntUnclaimed').textContent = unclaimed;
   document.getElementById('cntMine').textContent = mine;
   document.getElementById('cntAll').textContent = all.length;
+  const _htl = document.getElementById('hideTestState'); if (_htl) _htl.textContent = State.hideTest ? 'ON' : 'OFF';
   const closedCount = all.filter(c => State.closedSids.has(c.session_id)).length;
   const elClosed = document.getElementById('cntClosed'); if (elClosed) elClosed.textContent = closedCount;
   // Sidebar AI on/off badges
@@ -1073,7 +1097,7 @@ async function closeConversation() {
     _persistClosed();
     toast('Conversation closed', 'ok');
     // Jump to next conversation in current view
-    const list = applyFilters(State.conversations);
+    const list = applyFilters(visibleConvos());
     if (list.length === 0) {
       State.selectedSid = null;
     } else {
@@ -1758,12 +1782,12 @@ document.addEventListener('keydown', (e) => {
   if (e.key === '?') { e.preventDefault(); showCheats(); }
   else if (e.key === '/') { e.preventDefault(); document.getElementById('globalSearch').focus(); }
   else if (e.key === 'j') {
-    const list = applyFilters(State.conversations);
+    const list = applyFilters(visibleConvos());
     if (!list.length) return;
     const i = list.findIndex(c => c.session_id === State.selectedSid);
     selectConv(list[(i + 1) % list.length].session_id);
   } else if (e.key === 'k') {
-    const list = applyFilters(State.conversations);
+    const list = applyFilters(visibleConvos());
     if (!list.length) return;
     const i = list.findIndex(c => c.session_id === State.selectedSid);
     selectConv(list[(i - 1 + list.length) % list.length].session_id);
