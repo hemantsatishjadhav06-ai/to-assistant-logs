@@ -200,6 +200,20 @@ a { color: inherit; }
 .cmdk-foot { padding: 8px 14px; font-size: 11px; color: var(--text-soft); border-top: 1px solid var(--border); display: flex; gap: 14px; }
 .cmdk-empty { padding: 24px; text-align: center; color: var(--text-soft); font-size: 13px; }
 
+/* ---------- Attachments + agent transfer (v4.4) ---------- */
+.reply-tool.attach { cursor: pointer; }
+.bubble a { color: var(--brand-yellow); text-decoration: underline; word-break: break-all; }
+.msg-group.human .bubble a, .msg-group.agent .bubble a { color: #92670a; }
+.bubble .att-img { display: block; margin-top: 6px; max-width: 220px; max-height: 200px; border-radius: 8px; border: 1px solid var(--border); }
+.msg-system { text-align: center; color: var(--text-soft); font-size: 11.5px; padding: 6px 8px; }
+.msg-system .ts { opacity: .7; }
+.xfer-field { margin-bottom: 14px; }
+.xfer-field label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; font-weight: 600; }
+.xfer-field select, .xfer-field textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; color: var(--text); font-family: inherit; font-size: 13.5px; outline: none; }
+.xfer-field select:focus, .xfer-field textarea:focus { border-color: var(--brand-yellow); }
+.xfer-field textarea { resize: vertical; min-height: 54px; }
+
+
 
 .c360 { border-left: 1px solid var(--border); padding: 18px 16px; overflow-y: auto; background: var(--bg-elev); }
 .c360 h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-soft); margin-bottom: 8px; font-weight: 600; }
@@ -375,6 +389,27 @@ a { color: inherit; }
   </section>
 </main>
 
+<div class="modal" id="transferModal">
+  <div class="modal-box">
+    <h3>Transfer chat to another agent</h3>
+    <p>Hand this conversation to a teammate. AI stays paused and they become the assigned agent.</p>
+    <div class="xfer-field">
+      <label for="transferAgent">Transfer to</label>
+      <select id="transferAgent"></select>
+    </div>
+    <div class="xfer-field">
+      <label for="transferNote">Note (optional, internal)</label>
+      <textarea id="transferNote" placeholder="e.g. customer needs warranty help for a Babolat racquet"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeTransfer()">Cancel</button>
+      <button class="btn primary" id="confirmTransferBtn" onclick="confirmTransfer()">Transfer</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="attachInput" multiple style="display:none" onchange="attachPick(this)" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
+
 <div class="modal" id="takeoverModal">
   <div class="modal-box">
     <h3>Take over from AI?</h3>
@@ -485,6 +520,8 @@ const State = {
   notifSince: 0,
   sportFilter: 'all',
   inboxFilter: 'unclaimed',
+  agents: [],
+  assignments: {},
   search: '',
   pollTimer: null,
   pollErrors: 0,
@@ -540,10 +577,21 @@ function _desktopNotify(title, body) {
 function _updateTitleBadge(count) { document.title = count > 0 ? ('(' + count + ') ' + _titleBase) : _titleBase; }
 function alertNewHandoff(fresh) {
   if (!fresh || !fresh.length) return;
-  _beep();
-  const n = fresh[fresh.length - 1];
-  _desktopNotify('New support request', 'A ' + (n.sport || '') + ' customer needs a human agent.');
-  toast('🔔 ' + fresh.length + ' customer' + (fresh.length > 1 ? 's' : '') + ' waiting for an agent', 'err');
+  const myId = ((State.agent && State.agent.id) || '').toLowerCase();
+  const mineXfers = fresh.filter(n => n.type === 'transfer' && (n.to_agent_id || '').toLowerCase() === myId);
+  const handoffs = fresh.filter(n => n.type !== 'transfer');
+  if (mineXfers.length) {
+    _beep();
+    const x = mineXfers[mineXfers.length - 1];
+    _desktopNotify('Chat transferred to you', (x.from_agent_name || 'An agent') + ' transferred a ' + (x.sport || '') + ' chat to you.');
+    toast('🔁 ' + (x.from_agent_name || 'An agent') + ' transferred a chat to you', 'ok');
+  }
+  if (handoffs.length) {
+    _beep();
+    const n = handoffs[handoffs.length - 1];
+    _desktopNotify('New support request', 'A ' + (n.sport || '') + ' customer needs a human agent.');
+    toast('🔔 ' + handoffs.length + ' customer' + (handoffs.length > 1 ? 's' : '') + ' waiting for an agent', 'err');
+  }
 }
 function enableAlerts() {
   _alertsOn = true; localStorage.setItem('os.alerts', 'on');
@@ -589,6 +637,7 @@ async function boot() {
   document.getElementById('boot').style.display = 'none';
   initAlerts();
   loadCanned();
+  loadAgents();
   initCannedGlobalListeners();
 
   await refreshAll();
@@ -605,6 +654,7 @@ async function refreshAll() {
     ]);
     State.logs = logsRes.logs || [];
     State.aiState = { global: stateRes.global || {}, perCustomer: stateRes.perCustomer || {} };
+    State.assignments = stateRes.assignments || {};
     if (notifRes.notifications && notifRes.notifications.length) {
       const seen = new Set(State.notifications.map(n => n.id));
       const fresh = [];
@@ -672,9 +722,10 @@ function aiStatusFor(sid) {
   return 'on';
 }
 function statusFor(c) {
+  const a = (State.assignments || {})[c.session_id];
+  if (a) return { kind: 'claimed', who: a.agent_name || 'Agent', agent_id: a.agent_id || '' };
   const ai = aiStatusFor(c.session_id);
-  const aiOn = ai === 'on';
-  const hasNotif = State.notifications.some(n => n.session_id === c.session_id);
+  const hasNotif = State.notifications.some(n => n.session_id === c.session_id && n.type !== 'transfer');
   if (ai === 'off' && c.has_human) return { kind: 'claimed', who: c.last_human_agent || 'Agent' };
   if (ai === 'off' || hasNotif) return { kind: 'unclaimed' };
   return { kind: 'ai' };
@@ -831,7 +882,8 @@ function renderDetail() {
                               // aborted renderDetail() so the chat thread never rendered.
   const sportClass = ['tennis','padel','pickleball','badminton','squash'].includes(c.sport) ? c.sport : '';
   const me = (State.agent.agent_name || '').toLowerCase();
-  const isMine = s.kind === 'claimed' && (s.who||'').toLowerCase() === me;
+  const myId = (State.agent.id || '').toLowerCase();
+  const isMine = s.kind === 'claimed' && ((myId && (s.agent_id||'').toLowerCase() === myId) || (s.who||'').toLowerCase() === me);
   const replyDisabled = !isMine && s.kind !== 'unclaimed';
   const canTake = s.kind === 'unclaimed';
   const canHandBack = isMine;
@@ -850,6 +902,7 @@ function renderDetail() {
           ${isClosed ? `<button class="btn" onclick="reopenConversation()">↺ Reopen</button>` : ''}
           ${canTake && !isClosed ? `<button class="btn primary" onclick="openTakeover()">⚡ Take over</button>` : ''}
           ${canHandBack ? `<button class="btn danger" onclick="handBack()">↩️ Hand back to AI</button>` : ''}
+          ${!isClosed ? `<button class="btn" title="Transfer to another agent" onclick="openTransfer()">🔁 Transfer</button>` : ''}
           ${!canTake && !canHandBack && !isClosed && s.kind === 'claimed' ? `<span class="btn" style="background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.3);color:#10b981;cursor:default;">${escapeHtml(s.who)} is talking</span>` : ''}
           ${!canTake && !canHandBack && !isClosed && s.kind === 'ai' ? `<span class="btn" style="cursor:default;color:var(--text-muted);">AI is handling</span>` : ''}
           ${!isClosed ? `<button class="btn" title="Close conversation (e)" onclick="closeConversation()">✓ Close</button>` : ''}
@@ -863,6 +916,7 @@ function renderDetail() {
       <div class="reply-box">
         <div class="reply-toolbar">
           <span class="reply-tool" onclick="openCmdk()">⚡ Canned <span class="kbd">⌘/</span></span>
+          ${replyDisabled ? '' : `<span class="reply-tool attach" onclick="document.getElementById('attachInput').click()" title="Attach image, PDF or document">📎 Attach</span>`}
           <span class="reply-tool ai" onclick="toast('AI draft — Phase 2 (needs bot endpoint)','ok')">✨ AI draft <span class="kbd">⌘⇧A</span></span>
           <span style="margin-left:auto;font-size:11px;color:var(--text-soft);">${replyDisabled ? 'Take over first to reply' : `Replying as ${escapeHtml(State.agent.agent_name)}`}</span>
         </div>
@@ -937,6 +991,9 @@ function renderDetail() {
 function msgHtml(m) {
   const src = m.source || 'bot';
   const t = m.timestamp ? new Date(m.timestamp).toTimeString().slice(0,5) : '';
+  if (src === 'system') {
+    return `<div class="msg-system">${linkify(m.ai_response || '')} <span class="ts">· ${t}</span></div>`;
+  }
   const sc = m.intent && /short_circuit|warehouse|cross_store_info|cross_sport_redirect|support_contact|upgrade_program|order_handoff/.test(m.intent);
   const intentBadge = m.intent ? `<span style="color:var(--text-soft);font-size:11px;">intent: ${escapeHtml(m.intent)}</span>` : '';
   const scBadge = sc ? `<span class="short-circuit-tag">deterministic</span>` : '';
@@ -951,7 +1008,7 @@ function msgHtml(m) {
           <span>${t}</span>
           ${intentBadge}
         </div>
-        <div class="bubble">${escapeHtml(txt)}</div>
+        <div class="bubble">${linkify(txt)}</div>
       </div>`;
   }
 
@@ -964,7 +1021,7 @@ function msgHtml(m) {
           <span class="source-badge cust">Customer</span>
           <span>${t}</span>
         </div>
-        <div class="bubble">${escapeHtml(txt)}</div>
+        <div class="bubble">${linkify(txt)}</div>
       </div>`;
   }
 
@@ -980,7 +1037,7 @@ function msgHtml(m) {
           <span class="source-badge cust">Customer</span>
           <span>${t}</span>
         </div>
-        <div class="bubble">${escapeHtml(userQ)}</div>
+        <div class="bubble">${linkify(userQ)}</div>
       </div>`;
   }
   if (aiR) {
@@ -992,7 +1049,7 @@ function msgHtml(m) {
           ${intentBadge}
           ${scBadge}
         </div>
-        <div class="bubble">${escapeHtml(aiR)}</div>
+        <div class="bubble">${linkify(aiR)}</div>
       </div>`;
   }
   if (!html) {
@@ -1088,8 +1145,10 @@ async function confirmTakeover() {
   const btn = document.getElementById('confirmTakeoverBtn');
   btn.disabled = true;
   try {
-    await api('/api/toggle', { method:'POST', body: JSON.stringify({ scope:'session', id: sid, value:'off' })});
+    const cc = State.conversations.find(x => x.session_id === sid);
+    await api('/api/claim', { method:'POST', body: JSON.stringify({ session_id: sid, sport: cc ? cc.sport : undefined })});
     State.aiState.perCustomer[sid] = 'off';
+    State.assignments[sid] = { agent_id: State.agent.id || '', agent_name: State.agent.agent_name || 'Agent' };
     closeTakeover();
     toast('You are now talking to this customer', 'ok');
     await refreshAll();
@@ -1106,6 +1165,7 @@ async function handBack() {
   try {
     await api('/api/toggle', { method:'POST', body: JSON.stringify({ scope:'session', id: sid, value:'on' })});
     State.aiState.perCustomer[sid] = 'on';
+    if (State.assignments) delete State.assignments[sid];
     toast('AI is back on for this customer', 'ok');
     await refreshAll();
   } catch (e) {
@@ -1722,6 +1782,102 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'D' && e.shiftKey) toggleTheme();
   else if (e.key === 'r' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); manualRefresh(); }
 });
+
+/* =============================================================
+   Attachments + agent transfer (v4.4)
+   ============================================================= */
+async function loadAgents() {
+  try { const r = await api('/api/agents'); State.agents = (r && r.agents) || []; }
+  catch (e) { State.agents = []; }
+}
+
+// Safe linkify: escape text first, then turn bare URLs into anchors (+ image preview for /u/ links).
+function linkify(raw) {
+  const s = String(raw == null ? '' : raw);
+  const re = /(https?:\/\/[^\s<]+)/g;
+  let out = '', last = 0, m;
+  while ((m = re.exec(s))) {
+    out += escapeHtml(s.slice(last, m.index));
+    let url = m[1], trail = '';
+    while (/[.,;:!?)]$/.test(url)) { trail = url.slice(-1) + trail; url = url.slice(0, -1); }
+    const safe = escapeHtml(url).replace(/"/g, '%22');
+    out += '<a href="' + safe + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(url) + '</a>';
+    if (/\/u\/[a-f0-9]{8,}/.test(url)) out += '<img class="att-img" src="' + safe + '" alt="attachment" loading="lazy" onerror="this.style.display=\'none\'">';
+    out += escapeHtml(trail);
+    last = m.index + m[1].length;
+  }
+  out += escapeHtml(s.slice(last));
+  return out;
+}
+
+/* ----- Attachments ----- */
+function attachPick(input) {
+  const files = Array.from(input.files || []);
+  input.value = '';
+  if (!files.length) return;
+  const ta = document.getElementById('replyText');
+  if (!ta || ta.disabled) { toast('Take over the chat first to attach', 'err'); return; }
+  files.forEach(uploadOneFile);
+}
+async function uploadOneFile(file) {
+  if (file.size > 20 * 1024 * 1024) { toast(file.name + ' is over 20 MB', 'err'); return; }
+  toast('Uploading ' + file.name + '…', 'ok');
+  try {
+    const r = await fetch('/api/upload', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },
+      body: file
+    });
+    if (r.status === 401) { window.location.href = '/login'; return; }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    const ta = document.getElementById('replyText');
+    if (ta) {
+      const link = location.origin + d.url;
+      const prefix = (ta.value && !/\n$/.test(ta.value)) ? '\n' : '';
+      ta.value += prefix + '📎 ' + d.name + ': ' + link + '\n';
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    }
+    toast('Attached ' + d.name, 'ok');
+  } catch (e) {
+    toast('Upload failed: ' + e.message, 'err');
+  }
+}
+
+/* ----- Transfer to another agent ----- */
+function openTransfer() {
+  const c = State.conversations.find(x => x.session_id === State.selectedSid);
+  if (!c) { toast('Select a conversation first', 'err'); return; }
+  const myId = (State.agent.id || '').toLowerCase();
+  const others = (State.agents || []).filter(a => (a.id || '').toLowerCase() !== myId);
+  const sel = document.getElementById('transferAgent');
+  if (!others.length) sel.innerHTML = '<option value="">No other agents available</option>';
+  else sel.innerHTML = others.map(a => '<option value="' + escapeHtml(a.id) + '">' + escapeHtml(a.name) + (a.role === 'admin' ? ' (admin)' : '') + '</option>').join('');
+  document.getElementById('transferNote').value = '';
+  document.getElementById('transferModal').classList.add('show');
+}
+function closeTransfer() { document.getElementById('transferModal').classList.remove('show'); }
+async function confirmTransfer() {
+  const sid = State.selectedSid;
+  const c = State.conversations.find(x => x.session_id === sid);
+  if (!sid || !c) return;
+  const to = document.getElementById('transferAgent').value;
+  if (!to) { toast('Pick an agent to transfer to', 'err'); return; }
+  const note = document.getElementById('transferNote').value.trim();
+  const btn = document.getElementById('confirmTransferBtn');
+  btn.disabled = true;
+  try {
+    const r = await api('/api/transfer', { method: 'POST', body: JSON.stringify({ session_id: sid, to_agent_id: to, sport: c.sport, note }) });
+    closeTransfer();
+    toast('Transferred to ' + (r.to ? r.to.name : 'agent'), 'ok');
+    await refreshAll();
+  } catch (e) {
+    toast('Transfer failed: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 /* ---------- Util ---------- */
 function escapeHtml(s) {

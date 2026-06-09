@@ -231,6 +231,7 @@ const aiState = {
   global: { tennis: 'on', padel: 'on', pickleball: 'on', badminton: 'on', squash: 'on' },  // DEFAULT: ON
   perCustomer: {}  // empty by default — every new session inherits global=on
 };
+const assignments = {}; // session_id -> { agent_id, agent_name, by, at } (transfer/claim)
 const pendingReplies = {};
 const notifications = [];
 let pendingReplyId = 0;
@@ -278,6 +279,10 @@ function loadFromDisk() {
       if (s.aiState && s.aiState.perCustomer) {
         Object.assign(aiState.perCustomer, s.aiState.perCustomer);
       }
+      // Agent assignments (transfer/claim) — restore
+      if (s.assignments && typeof s.assignments === 'object') {
+        Object.assign(assignments, s.assignments);
+      }
       // Notifications — restore unread alerts
       if (Array.isArray(s.notifications)) {
         notifications.push(...s.notifications);
@@ -299,6 +304,7 @@ function saveStateDebounced() {
       const tmp = STATE_FILE + '.tmp';
       fs.writeFileSync(tmp, JSON.stringify({
         aiState,
+        assignments,
         notifications: notifications.slice(-200)  // keep last 200
       }, null, 2));
       fs.renameSync(tmp, STATE_FILE);  // atomic
@@ -415,6 +421,32 @@ function loadCanned() {
   console.log(`[canned] seeded ${canned.length} default canned replies`);
 }
 loadCanned();
+
+// ============================================================
+// File attachments (v4.4) — disk-backed uploads
+// ============================================================
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch (_) {}
+const UPLOADS_META_FILE = path.join(DATA_DIR, 'uploads.json');
+let uploadsMeta = {};
+try { if (fs.existsSync(UPLOADS_META_FILE)) uploadsMeta = JSON.parse(fs.readFileSync(UPLOADS_META_FILE, 'utf8')) || {}; }
+catch (e) { uploadsMeta = {}; console.warn('[upload] meta load failed:', e.message); }
+function saveUploadsMeta() {
+  // Synchronous: uploads are infrequent and losing the id->name/type map orphans files.
+  try { const t = UPLOADS_META_FILE + '.tmp'; fs.writeFileSync(t, JSON.stringify(uploadsMeta)); fs.renameSync(t, UPLOADS_META_FILE); }
+  catch (e) { console.warn('[upload] meta save failed:', e.message); }
+}
+function safeName(s) {
+  return String(s || 'file').replace(/[^A-Za-z0-9._ -]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120) || 'file';
+}
+// Types we are willing to render inline in a browser. Everything else downloads.
+const INLINE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'application/pdf']);
+function safeServeType(t) {
+  t = String(t || '').toLowerCase().split(';')[0].trim();
+  // Never serve active/HTML/SVG content with its own type (XSS risk) — force download.
+  if (t === 'text/html' || t === 'application/xhtml+xml' || t === 'image/svg+xml' || t.includes('javascript') || t.includes('ecmascript')) return 'application/octet-stream';
+  return t || 'application/octet-stream';
+}
 
 // ===== Ops Monitor agent (admin-only daily health + LLM-cost watchdog) =====
 // Separate module (ops-monitor.js). Mounted here so it shares admin auth + the
@@ -579,6 +611,85 @@ app.delete('/api/canned/:id', requireAdmin, (req, res) => {
   saveCannedDebounced();
   audit(req, 'canned_delete', id, { label: removed.label }, null);
   res.json({ ok: true });
+});
+
+// ===== File attachments API (v4.4) =====
+// Upload is agent-only; the raw body is parsed just for this route (no new deps).
+app.post('/api/upload', requireAgent, express.raw({ type: () => true, limit: '20mb' }), (req, res) => {
+  try {
+    const buf = req.body;
+    if (!buf || !buf.length) return res.status(400).json({ ok: false, error: 'empty_file' });
+    if (buf.length > 20 * 1024 * 1024) return res.status(413).json({ ok: false, error: 'too_large' });
+    const name = safeName(decodeURIComponent(req.headers['x-filename'] || 'file'));
+    const type = String(req.headers['content-type'] || 'application/octet-stream').split(';')[0].trim();
+    const id = crypto.randomBytes(16).toString('hex');
+    fs.writeFileSync(path.join(UPLOAD_DIR, id), buf);
+    uploadsMeta[id] = { name, type, size: buf.length, at: new Date().toISOString(), by: req.agent.agent_name || '' };
+    saveUploadsMeta();
+    audit(req, 'upload', id, null, { name, type, size: buf.length });
+    res.json({ ok: true, id, name, type, size: buf.length, url: '/u/' + id });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+// Public attachment serving — customers open these links, so NO auth gate here.
+app.get('/u/:id', (req, res) => {
+  const id = String(req.params.id || '').replace(/[^a-f0-9]/g, '');
+  const meta = uploadsMeta[id];
+  const file = path.join(UPLOAD_DIR, id);
+  if (!id || !meta || !fs.existsSync(file)) return res.status(404).send('Not found');
+  res.setHeader('Content-Type', safeServeType(meta.type));
+  const disp = INLINE_TYPES.has(String(meta.type || '').toLowerCase()) ? 'inline' : 'attachment';
+  res.setHeader('Content-Disposition', disp + '; filename="' + safeName(meta.name).replace(/"/g, '') + '"');
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  fs.createReadStream(file).on('error', () => { if (!res.headersSent) res.status(500).end(); }).pipe(res);
+});
+
+// ===== Agent directory + transfer / claim (v4.4) =====
+// Any signed-in agent can read the directory (for the transfer picker).
+app.get('/api/agents', requireAgent, (req, res) => {
+  const list = Array.from(users.values()).map(u => ({ id: u.id, name: u.name, role: u.role }));
+  if (!list.length && req.agent) list.push({ id: req.agent.id || 'me', name: req.agent.agent_name || 'Me', role: req.agent.role || 'agent' });
+  res.json({ ok: true, agents: list });
+});
+// Claim a conversation for yourself (used by Take over) — assigns + pauses AI.
+app.post('/api/claim', requireAgent, (req, res) => {
+  const { session_id } = req.body || {};
+  if (!session_id) return res.status(400).json({ ok: false, error: 'session_id required' });
+  assignments[session_id] = { agent_id: req.agent.id || '', agent_name: req.agent.agent_name || 'Agent', by: req.agent.agent_name || 'Agent', at: new Date().toISOString() };
+  aiState.perCustomer[session_id] = 'off';
+  saveStateDebounced();
+  audit(req, 'claim', session_id, null, { agent: req.agent.agent_name });
+  res.json({ ok: true });
+});
+// Transfer a conversation to a different human agent.
+app.post('/api/transfer', requireAgent, (req, res) => {
+  const { session_id, to_agent_id, sport, note } = req.body || {};
+  if (!session_id || !to_agent_id) return res.status(400).json({ ok: false, error: 'session_id_and_to_agent_id_required' });
+  const target = findUser(to_agent_id);
+  if (!target) return res.status(404).json({ ok: false, error: 'agent_not_found' });
+  const from = req.agent.agent_name || 'Agent';
+  assignments[session_id] = { agent_id: target.id, agent_name: target.name, by: from, at: new Date().toISOString() };
+  aiState.perCustomer[session_id] = 'off';  // human is in control after a transfer
+  const noteText = '🔁 Chat transferred from ' + from + ' to ' + target.name + (note ? (' — ' + String(note).slice(0, 300)) : '');
+  pushLog({
+    id: totalReceived + 1, received_at: new Date().toISOString(), timestamp: new Date().toISOString(),
+    sport: String(sport || 'unknown').toLowerCase(), session_id,
+    user_query: '', ai_response: noteText, intent: 'transfer', endpoint: '/api/transfer',
+    source: 'system', agent_name: from, meta: ''
+  });
+  const notif = {
+    id: ++notificationId, session_id, sport: String(sport || 'unknown').toLowerCase(),
+    type: 'transfer', to_agent_id: target.id, to_agent_name: target.name, from_agent_name: from,
+    timestamp: new Date().toISOString(), status: 'unread'
+  };
+  notifications.push(notif);
+  while (notifications.length > 500) notifications.shift();
+  saveStateDebounced();
+  audit(req, 'transfer', session_id, null, { to: target.name, by: from });
+  console.log(`[transfer] ${session_id} ${from} -> ${target.name}`);
+  res.json({ ok: true, to: { id: target.id, name: target.name } });
 });
 
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
@@ -784,6 +895,7 @@ app.get('/api/state-all', requireAgent, (req, res) => {
   res.json({
     global: aiState.global,
     perCustomer: aiState.perCustomer,
+    assignments,
     notifications: notifications.filter(n => n.status === 'unread').length
   });
 });
@@ -800,6 +912,7 @@ app.post('/api/toggle', requireAgent, (req, res) => {
     aiState.global[id] = value;
   } else {
     aiState.perCustomer[id] = value;
+    if (value === 'on') delete assignments[id];  // handing back to AI releases the human assignment
   }
   saveStateDebounced();
   audit(req, 'toggle_ai', `${scope}:${id}`, _before, value);

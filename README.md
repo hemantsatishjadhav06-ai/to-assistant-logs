@@ -23,6 +23,11 @@ Each bot fires a non-blocking POST to `/log` after every user query + AI respons
 | `POST`   | `/api/canned` | Create a canned reply (admin only) |
 | `PUT`    | `/api/canned/:id` | Update a canned reply (admin only) |
 | `DELETE` | `/api/canned/:id` | Delete a canned reply (admin only) |
+| `POST`   | `/api/upload` | Upload an attachment (agent); returns a public link |
+| `GET`    | `/u/:id` | Public attachment download / inline preview |
+| `GET`    | `/api/agents` | List agents for the transfer picker (agent) |
+| `POST`   | `/api/claim` | Claim/assign a conversation to yourself (agent) |
+| `POST`   | `/api/transfer` | Transfer a conversation to another agent (agent) |
 
 ## Dashboard features
 
@@ -33,6 +38,8 @@ Each bot fires a non-blocking POST to `/log` after every user query + AI respons
 - **Search** — full-text across query, response, intent, session ID.
 - **Compact table view** — toggle for power users who prefer dense rows.
 - **Canned replies** — in the reply box, type a keyword (e.g. `warranty`, `track`, `refund`) for an inline suggestion (↹ Tab to insert), or press ⌘/ for the full searchable palette. Manage the list in **/admin** (admins). Seeded with the standard Tennisoutlet replies; stored in `canned.json` in the data dir.
+- **Attachments** — 📎 in the reply box uploads an image, PDF or document and drops a shareable link into the reply (also previewed in the thread).
+- **Transfer to an agent** — 🔁 reassigns a live chat to a teammate; pauses AI, notifies them, and logs an internal note.
 
 ## Setting up Zoho SalesIQ → /zoho webhook
 
