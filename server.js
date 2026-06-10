@@ -237,6 +237,37 @@ const notifications = [];
 let pendingReplyId = 0;
 let notificationId = 0;
 
+// ===== Working hours (support availability) =====
+// Render dynos run in UTC — never use new Date().getHours() directly.
+// All env-configurable:
+//   WORKING_TZ           — IANA timezone the support team works in (default Asia/Kolkata)
+//   WORKING_HOURS_START  — first working hour, inclusive, 0-23 (default 10 → 10:00)
+//   WORKING_HOURS_END    — end hour, exclusive, 1-24 (default 19 → up to 18:59)
+//   WORKING_DAYS         — comma list, 0=Sun..6=Sat (default '1,2,3,4,5,6' = Mon-Sat)
+//   AFTER_HOURS_MESSAGE  — what the customer sees when requesting a human off-hours
+const WORKING_TZ = process.env.WORKING_TZ || 'Asia/Kolkata';
+const WORKING_HOURS_START = parseInt(process.env.WORKING_HOURS_START || '10', 10);
+const WORKING_HOURS_END = parseInt(process.env.WORKING_HOURS_END || '19', 10);
+const WORKING_DAYS = (process.env.WORKING_DAYS || '1,2,3,4,5,6').split(',').map(Number);
+const AFTER_HOURS_MESSAGE = process.env.AFTER_HOURS_MESSAGE ||
+  `Our support team is currently offline — we're available ${String(WORKING_HOURS_START).padStart(2, '0')}:00 to ${String(WORKING_HOURS_END).padStart(2, '0')}:00 IST, Monday to Saturday. ` +
+  `Please leave your message here and the team will get back to you as soon as we're online.`;
+
+// Returns { day: 0-6, hour: 0-23 } for `date` in the support team's timezone.
+function _tzNow(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: WORKING_TZ, hourCycle: 'h23', weekday: 'short', hour: 'numeric'
+  }).formatToParts(date);
+  const get = t => (parts.find(p => p.type === t) || {}).value;
+  const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return { day: dayMap[get('weekday')], hour: parseInt(get('hour'), 10) };
+}
+
+function isWorkingHours(date = new Date()) {
+  const { day, hour } = _tzNow(date);
+  return WORKING_DAYS.includes(day) && hour >= WORKING_HOURS_START && hour < WORKING_HOURS_END;
+}
+
 // ----- Load persisted logs + state on boot -----
 function loadFromDisk() {
   // Logs (one JSON object per line)
@@ -928,7 +959,12 @@ app.delete('/api/logs', (req, res) => {
 app.get('/api/state', requireBot, (req, res) => {
   const sport = String(req.query.sport || '').toLowerCase();
   const sessionId = String(req.query.session_id || '');
-  res.json(resolveAiOn(sport, sessionId));
+  const working = isWorkingHours();
+  res.json({
+    ...resolveAiOn(sport, sessionId),
+    working_hours: working,
+    after_hours_message: working ? null : AFTER_HOURS_MESSAGE
+  });
 });
 
 // GET /api/state-all — dashboard reads everything for the toggle UI
@@ -966,6 +1002,33 @@ app.post('/api/toggle', requireAgent, (req, res) => {
 app.post('/api/customer-needs-human', botRateLimit(60), requireBot, (req, res) => {
   const { session_id, sport, type } = req.body || {};
   if (!session_id) return res.status(400).json({ ok: false, error: 'session_id required' });
+
+  // Outside working hours: do NOT flip AI off (nobody is around to reply — the
+  // customer would be stranded with a silent chat until morning). Log a
+  // notification so the team sees the missed request when they're back, keep
+  // the AI in control, and hand the bot an after-hours message to relay.
+  if (!isWorkingHours()) {
+    const notif = {
+      id: ++notificationId,
+      session_id,
+      sport: String(sport || 'unknown').toLowerCase(),
+      type: 'after_hours_request',
+      timestamp: new Date().toISOString(),
+      status: 'unread'
+    };
+    notifications.push(notif);
+    while (notifications.length > 500) notifications.shift();
+    saveStateDebounced();
+    console.log(`[notify] ${notif.sport}/${session_id} requested human AFTER HOURS — handoff suppressed`);
+    return res.json({
+      ok: true,
+      handoff: false,
+      working_hours: false,
+      message: AFTER_HOURS_MESSAGE,
+      notification_id: notif.id
+    });
+  }
+
   // Auto-flip per-customer toggle to OFF
   aiState.perCustomer[session_id] = 'off';
   // Push notification
@@ -981,7 +1044,7 @@ app.post('/api/customer-needs-human', botRateLimit(60), requireBot, (req, res) =
   while (notifications.length > 500) notifications.shift();
   saveStateDebounced();
   console.log(`[notify] ${notif.sport}/${session_id} requested human (type=${notif.type})`);
-  res.json({ ok: true, notification_id: notif.id });
+  res.json({ ok: true, handoff: true, working_hours: true, notification_id: notif.id });
 });
 
 // POST /api/human-message  body: {session_id, text, agent_name, sport}
