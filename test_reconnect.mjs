@@ -45,6 +45,10 @@ async function run() {
   let a2 = await login(base, 'agent2', 'pass2');
   const SID = 'c_alice';
 
+  console.log('\n[0] Presence: both logged-in agents are counted online');
+  let stp = await aGet(base, a2, '/api/state-all');
+  ok((stp.online_agents||[]).includes('agent1') && (stp.online_agents||[]).includes('agent2'), 'online_agents lists both agents');
+
   console.log('\n[1] First contact (no prior agent)');
   let r = await bPost(base, '/api/customer-needs-human', { session_id: SID, sport: 'tennis' });
   ok(r.ok && r.reconnect === false, 'first contact is not a reconnect');
@@ -76,6 +80,9 @@ async function run() {
   console.log('\n[5] ISSUE 2: close + prev agent OFFLINE -> UNCLAIMED');
   await aPost(base, a1, '/api/close', { session_id: SID, sport: 'tennis' });
   await aPost(base, a1, '/api/logout', {});
+  let stoff = await aGet(base, a2, '/api/state-all');
+  ok(!(stoff.online_agents||[]).includes('agent1'), 'online_agents drops agent1 after logout');
+  ok((stoff.online_agents||[]).includes('agent2'), 'agent2 still online');
   r = await bPost(base, '/api/customer-needs-human', { session_id: SID, sport: 'tennis' });
   st = await aGet(base, a2, '/api/state-all');
   ok(r.reconnect === true, 'flagged as reconnect');
@@ -110,6 +117,20 @@ async function run() {
   ok(r.status === 'assigned' && r.reassigned_to === 'Agent Two', 'auto-assigned to the different agent (Agent Two)');
   ok(st.assignments[SID2] && st.assignments[SID2].agent_id === 'agent2', 'assignment is agent2, not offline agent1');
   ok(!st.closed.includes(SID2), 'reopened');
+  child.kill();
+
+  console.log('\n=== BOOT 3: presence expiry (PRESENCE_WINDOW_SEC=1) ===');
+  ({ child, base } = boot({ PRESENCE_WINDOW_SEC: '1' }));
+  await waitReady(base);
+  a1 = await login(base, 'agent1', 'pass1');
+  a2 = await login(base, 'agent2', 'pass2');
+  console.log('\n[8] Idle agent drops off after the presence window');
+  let s0 = await aGet(base, a2, '/api/state-all');
+  ok((s0.online_agents||[]).includes('agent1'), 'agent1 online immediately after login');
+  await new Promise(r => setTimeout(r, 1300));   // a1 stays idle past the 1s window
+  let s1 = await aGet(base, a2, '/api/state-all'); // only a2 refreshes its presence
+  ok(!(s1.online_agents||[]).includes('agent1'), 'idle agent1 drops off after window');
+  ok((s1.online_agents||[]).includes('agent2'), 'active agent2 stays online');
   child.kill();
 
   console.log(`\n==== RESULT: ${passed} passed, ${failed} failed ====`);

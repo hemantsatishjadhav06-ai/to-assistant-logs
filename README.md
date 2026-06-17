@@ -54,7 +54,7 @@ When a customer who was handled before asks for a human again (`POST /api/custom
 - **Same agent if available.** If the agent who handled the customer is still online, the chat is routed straight back to them (continuity). Toggle off with `RECONNECT_RETURN_TO_SAME_AGENT=off`.
 - **Different agent if not.** If that agent is offline, the chat is **not** locked to them. By default it returns to the **Unclaimed** queue so any other available agent can pick it up. Set `RECONNECT_AUTO_ASSIGN_FALLBACK=on` to instead auto-assign the least-loaded *other* online agent.
 - **Reopen in Unclaimed.** Because close state is now server-side, a closed chat that reconnects automatically leaves "Closed" and reappears in the dashboard (Unclaimed, or under whoever it was routed to) on the next poll.
-- *"Online"* means the agent currently has a live dashboard login session. Outside working hours the handoff is still suppressed (AI stays on), but the chat is reopened so the team sees it when they return.
+- The header **"Live agents"** KPI shows how many support staff are online right now (presence-based), not the number of human-handled chats. *"Online"* means the agent's dashboard made an authenticated request within `PRESENCE_WINDOW_SEC`. Outside working hours the handoff is still suppressed (AI stays on), but the chat is reopened so the team sees it when they return.
 
 ## Setting up Zoho SalesIQ → /zoho webhook
 
@@ -91,3 +91,4 @@ In-memory ring buffer. Keeps the last `MAX_ENTRIES` (default 5000) entries. Pers
 | `NODE_ENV` | no | `production` | |
 | `RECONNECT_RETURN_TO_SAME_AGENT` | no | `on` | Route a reconnecting customer back to their previous agent if that agent is online |
 | `RECONNECT_AUTO_ASSIGN_FALLBACK` | no | `off` | If the previous agent is offline, auto-assign the next available agent instead of using the Unclaimed queue |
+| `PRESENCE_WINDOW_SEC` | no | `120` | An agent is counted as a "Live agent" only if their dashboard pinged within this many seconds (presence window) |

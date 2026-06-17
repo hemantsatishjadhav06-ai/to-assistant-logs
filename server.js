@@ -93,6 +93,7 @@ function getSession(req) {
   const sess = sessions.get(sid);
   if (!sess) return null;
   if (sess.expires_at < Date.now()) { sessions.delete(sid); return null; }
+  sess.last_seen = Date.now();   // presence: any authed request keeps the agent "live"
   return sess;
 }
 function clientIp(req) {
@@ -252,13 +253,20 @@ let notificationId = 0;
 //        dropping the chat into the shared Unclaimed queue.
 const RECONNECT_RETURN_TO_SAME_AGENT = (process.env.RECONNECT_RETURN_TO_SAME_AGENT || 'on') !== 'off';
 const RECONNECT_AUTO_ASSIGN_FALLBACK = (process.env.RECONNECT_AUTO_ASSIGN_FALLBACK || 'off') === 'on';
+// An agent counts as "live right now" only if their dashboard made an
+// authenticated request within this window. The console polls every few
+// seconds, so an open tab stays live and a closed one drops off after the
+// window. Tunable via PRESENCE_WINDOW_SEC (default 120s).
+const PRESENCE_WINDOW_MS = (parseInt(process.env.PRESENCE_WINDOW_SEC || '120', 10) || 120) * 1000;
 
-// Set of agent ids with a live (non-expired) session right now.
+// Set of agent ids who are online AND active within the presence window.
 function onlineAgentIds() {
   const now = Date.now();
   const ids = new Set();
   for (const s of sessions.values()) {
-    if (s && s.expires_at > now && s.id) ids.add(String(s.id).toLowerCase());
+    if (s && s.expires_at > now && s.id && (now - (s.last_seen || 0) < PRESENCE_WINDOW_MS)) {
+      ids.add(String(s.id).toLowerCase());
+    }
   }
   return ids;
 }
@@ -627,6 +635,7 @@ app.post('/api/login', (req, res) => {
     return res.status(500).json({ ok: false, error: 'server_not_configured' });
   }
   const sid = newSessionId();
+  sess.last_seen = now;   // presence: count as live immediately on login
   sessions.set(sid, sess);
   loginAttempts.delete(ip);
   setCookie(res, 'to_session', sid, { maxAge: SESSION_TTL_MS / 1000 });

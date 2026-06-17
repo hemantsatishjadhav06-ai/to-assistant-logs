@@ -831,10 +831,12 @@ function render() {
   const unclaimed = all.filter(c => statusFor(c).kind === 'unclaimed').length;
   const me = (State.agent.agent_name || '').toLowerCase();
   const mine = all.filter(c => { const s = statusFor(c); return s.kind === 'claimed' && (s.who||'').toLowerCase() === me; }).length;
-  const live = all.filter(c => statusFor(c).kind === 'claimed').length;
+  // "Live agents" = number of support staff currently online right now
+  // (presence-based, from the server), NOT the count of human-handled chats.
+  const liveAgents = (State.onlineAgents && State.onlineAgents.size) || 0;
   const aiCount = all.filter(c => statusFor(c).kind === 'ai').length;
   var _kr = document.getElementById('kpiRow');
-  if (_kr) _kr.innerHTML = '<div class="kpi waiting"><div class="n">'+unclaimed+'</div><div class="l">Waiting</div></div><div class="kpi live"><div class="n">'+live+'</div><div class="l">Live agent</div></div><div class="kpi"><div class="n">'+aiCount+'</div><div class="l">AI handling</div></div><div class="kpi"><div class="n">'+all.length+'</div><div class="l">Total</div></div>';
+  if (_kr) _kr.innerHTML = '<div class="kpi waiting"><div class="n">'+unclaimed+'</div><div class="l">Waiting</div></div><div class="kpi live" title="Support agents online right now"><div class="n">'+liveAgents+'</div><div class="l">Live agents</div></div><div class="kpi"><div class="n">'+aiCount+'</div><div class="l">AI handling</div></div><div class="kpi"><div class="n">'+all.length+'</div><div class="l">Total</div></div>';
   document.getElementById('cntUnclaimed').textContent = unclaimed;
   document.getElementById('cntMine').textContent = mine;
   document.getElementById('cntAll').textContent = all.length;
