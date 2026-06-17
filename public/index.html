@@ -744,10 +744,16 @@ function aiStatusFor(sid) {
 function statusFor(c) {
   const a = (State.assignments || {})[c.session_id];
   if (a) return { kind: 'claimed', who: a.agent_name || 'Agent', agent_id: a.agent_id || '' };
-  const ai = aiStatusFor(c.session_id);
+  // A conversation only "needs an agent" when the customer actually asked for one
+  // (a handoff notification) OR the AI was paused for THIS specific customer.
+  // The per-sport Global AI master switch being off must NOT, by itself, mark
+  // every conversation as needing an agent — that floods Unclaimed with chats
+  // nobody requested a human for. (Global off just stops the bot replying.)
+  const per = (State.aiState.perCustomer || {})[c.session_id];   // 'on' | 'off' | undefined
   const hasNotif = State.notifications.some(n => n.session_id === c.session_id && n.type !== 'transfer');
-  if (ai === 'off' && c.has_human) return { kind: 'claimed', who: c.last_human_agent || 'Agent' };
-  if (ai === 'off' || hasNotif) return { kind: 'unclaimed' };
+  const needsAgent = hasNotif || per === 'off';
+  if (needsAgent && c.has_human) return { kind: 'claimed', who: c.last_human_agent || 'Agent' };
+  if (needsAgent) return { kind: 'unclaimed' };
   return { kind: 'ai' };
 }
 function priorityFor(c) {
@@ -928,8 +934,8 @@ function renderDetail() {
   const me = (State.agent.agent_name || '').toLowerCase();
   const myId = (State.agent.id || '').toLowerCase();
   const isMine = s.kind === 'claimed' && ((myId && (s.agent_id||'').toLowerCase() === myId) || (s.who||'').toLowerCase() === me);
-  const replyDisabled = !isMine && s.kind !== 'unclaimed';
-  const canTake = s.kind === 'unclaimed';
+  const canTake = s.kind === 'unclaimed' || s.kind === 'ai';   // agents can jump into any AI chat
+  const replyDisabled = !isMine && s.kind === 'claimed';        // only blocked when another agent owns it
   const canHandBack = isMine;
   const isClosed = State.closedSids.has(c.session_id);
 
