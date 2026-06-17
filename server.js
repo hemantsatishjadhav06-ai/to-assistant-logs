@@ -232,10 +232,60 @@ const aiState = {
   perCustomer: {}  // empty by default — every new session inherits global=on
 };
 const assignments = {}; // session_id -> { agent_id, agent_name, by, at } (transfer/claim)
+// v5 conversation lifecycle: tracks closed state + the last human agent who
+// handled each session, so a returning customer can be routed back to the
+// same agent (or reassigned to a different one when that agent is offline).
+// session_id -> { closed, closedAt, closedBy, lastAgentId, lastAgentName, lastReconnectAt }
+const convMeta = {};
 const pendingReplies = {};
 const notifications = [];
 let pendingReplyId = 0;
 let notificationId = 0;
+
+// ----- Agent availability (used for reconnect routing) -----
+// "Online" = the agent has at least one non-expired dashboard session.
+// Reconnect routing is env-tunable:
+//   RECONNECT_RETURN_TO_SAME_AGENT (default 'on')  — if the previous agent is
+//        online, route the returning customer straight back to them.
+//   RECONNECT_AUTO_ASSIGN_FALLBACK (default 'off') — if the previous agent is
+//        offline, auto-assign to the least-loaded other online agent instead of
+//        dropping the chat into the shared Unclaimed queue.
+const RECONNECT_RETURN_TO_SAME_AGENT = (process.env.RECONNECT_RETURN_TO_SAME_AGENT || 'on') !== 'off';
+const RECONNECT_AUTO_ASSIGN_FALLBACK = (process.env.RECONNECT_AUTO_ASSIGN_FALLBACK || 'off') === 'on';
+
+// Set of agent ids with a live (non-expired) session right now.
+function onlineAgentIds() {
+  const now = Date.now();
+  const ids = new Set();
+  for (const s of sessions.values()) {
+    if (s && s.expires_at > now && s.id) ids.add(String(s.id).toLowerCase());
+  }
+  return ids;
+}
+function isAgentOnline(id) {
+  if (!id) return false;
+  return onlineAgentIds().has(String(id).toLowerCase());
+}
+// Pick the least-loaded online agent other than `excludeId` (by current
+// assignment count). Returns the user object, or null if none available.
+function pickAvailableAgent(excludeId) {
+  const online = onlineAgentIds();
+  if (excludeId) online.delete(String(excludeId).toLowerCase());
+  if (!online.size) return null;
+  const load = {};
+  for (const a of Object.values(assignments)) {
+    const k = String(a.agent_id || '').toLowerCase();
+    if (k) load[k] = (load[k] || 0) + 1;
+  }
+  let best = null, bestScore = Infinity;
+  for (const id of online) {
+    const u = findUser(id);
+    if (!u) continue;                      // skip master-password sessions with no user record
+    const score = load[id] || 0;
+    if (score < bestScore) { bestScore = score; best = u; }
+  }
+  return best;
+}
 
 // ===== Working hours (support availability) =====
 // Render dynos run in UTC — never use new Date().getHours() directly.
@@ -314,6 +364,10 @@ function loadFromDisk() {
       if (s.assignments && typeof s.assignments === 'object') {
         Object.assign(assignments, s.assignments);
       }
+      // Conversation lifecycle (closed flag + last agent) — restore
+      if (s.convMeta && typeof s.convMeta === 'object') {
+        Object.assign(convMeta, s.convMeta);
+      }
       // Notifications — restore unread alerts
       if (Array.isArray(s.notifications)) {
         notifications.push(...s.notifications);
@@ -336,6 +390,7 @@ function saveStateDebounced() {
       fs.writeFileSync(tmp, JSON.stringify({
         aiState,
         assignments,
+        convMeta,
         notifications: notifications.slice(-200)  // keep last 200
       }, null, 2));
       fs.renameSync(tmp, STATE_FILE);  // atomic
@@ -706,12 +761,24 @@ app.get('/api/agents', requireAgent, (req, res) => {
   if (!list.length && req.agent) list.push({ id: req.agent.id || 'me', name: req.agent.agent_name || 'Me', role: req.agent.role || 'agent' });
   res.json({ ok: true, agents: list });
 });
+// Remember who last handled a session + clear any closed flag (an active
+// assignment means the conversation is open again).
+function recordAssignment(session_id, agent_id, agent_name) {
+  const m = convMeta[session_id] || (convMeta[session_id] = {});
+  m.lastAgentId = agent_id || '';
+  m.lastAgentName = agent_name || 'Agent';
+  m.closed = false;
+  m.closedAt = null;
+  m.closedBy = null;
+}
+
 // Claim a conversation for yourself (used by Take over) — assigns + pauses AI.
 app.post('/api/claim', requireAgent, (req, res) => {
   const { session_id } = req.body || {};
   if (!session_id) return res.status(400).json({ ok: false, error: 'session_id required' });
   assignments[session_id] = { agent_id: req.agent.id || '', agent_name: req.agent.agent_name || 'Agent', by: req.agent.agent_name || 'Agent', at: new Date().toISOString() };
   aiState.perCustomer[session_id] = 'off';
+  recordAssignment(session_id, req.agent.id || '', req.agent.agent_name || 'Agent');
   saveStateDebounced();
   audit(req, 'claim', session_id, null, { agent: req.agent.agent_name });
   res.json({ ok: true });
@@ -725,6 +792,7 @@ app.post('/api/transfer', requireAgent, (req, res) => {
   const from = req.agent.agent_name || 'Agent';
   assignments[session_id] = { agent_id: target.id, agent_name: target.name, by: from, at: new Date().toISOString() };
   aiState.perCustomer[session_id] = 'off';  // human is in control after a transfer
+  recordAssignment(session_id, target.id, target.name);
   const noteText = '🔁 Chat transferred from ' + from + ' to ' + target.name + (note ? (' — ' + String(note).slice(0, 300)) : '');
   pushLog({
     id: totalReceived + 1, received_at: new Date().toISOString(), timestamp: new Date().toISOString(),
@@ -743,6 +811,61 @@ app.post('/api/transfer', requireAgent, (req, res) => {
   audit(req, 'transfer', session_id, null, { to: target.name, by: from });
   console.log(`[transfer] ${session_id} ${from} -> ${target.name}`);
   res.json({ ok: true, to: { id: target.id, name: target.name } });
+});
+
+// Mark every still-open human-request notification for a session as read.
+// Used when a chat is closed so a stale "waiting" alert doesn't keep the
+// conversation looking unclaimed.
+function ackHumanNotifications(session_id) {
+  let acked = 0;
+  for (const n of notifications) {
+    if (n.session_id === session_id && n.status === 'unread' &&
+        ['talk_to_human', 'auto_handoff', 'after_hours_request', 'reconnect', 'reconnect_assigned'].includes(n.type)) {
+      n.status = 'read';
+      acked++;
+    }
+  }
+  return acked;
+}
+
+// Close a conversation (server-authoritative). Frees the assignment, hands AI
+// back on, clears the waiting alert, and remembers the last agent so a
+// returning customer can be routed appropriately.
+app.post('/api/close', requireAgent, (req, res) => {
+  const { session_id, sport } = req.body || {};
+  if (!session_id) return res.status(400).json({ ok: false, error: 'session_id required' });
+  const prev = assignments[session_id];
+  const m = convMeta[session_id] || (convMeta[session_id] = {});
+  if (prev) { m.lastAgentId = prev.agent_id || ''; m.lastAgentName = prev.agent_name || 'Agent'; }
+  m.closed = true;
+  m.closedAt = new Date().toISOString();
+  m.closedBy = req.agent.agent_name || 'Agent';
+  delete assignments[session_id];           // free it
+  aiState.perCustomer[session_id] = 'on';    // AI resumes for this customer
+  ackHumanNotifications(session_id);          // clear the "waiting" alert
+  pushLog({
+    id: totalReceived + 1, received_at: new Date().toISOString(), timestamp: new Date().toISOString(),
+    sport: String(sport || 'unknown').toLowerCase(), session_id,
+    user_query: '', ai_response: '✓ Conversation closed by ' + (req.agent.agent_name || 'Agent') + '. AI resumed.',
+    intent: 'close', endpoint: '/api/close', source: 'system', agent_name: req.agent.agent_name || 'Agent', meta: ''
+  });
+  saveStateDebounced();
+  audit(req, 'close', session_id, null, { by: req.agent.agent_name });
+  console.log(`[close] ${session_id} by ${req.agent.agent_name}`);
+  res.json({ ok: true });
+});
+
+// Reopen a previously-closed conversation (operator-initiated).
+app.post('/api/reopen', requireAgent, (req, res) => {
+  const { session_id } = req.body || {};
+  if (!session_id) return res.status(400).json({ ok: false, error: 'session_id required' });
+  const m = convMeta[session_id] || (convMeta[session_id] = {});
+  m.closed = false;
+  m.closedAt = null;
+  m.closedBy = null;
+  saveStateDebounced();
+  audit(req, 'reopen', session_id, null, { by: req.agent.agent_name });
+  res.json({ ok: true });
 });
 
 // ===== Test-data cleanup (v4.5, admin only) =====
@@ -973,6 +1096,9 @@ app.get('/api/state-all', requireAgent, (req, res) => {
     global: aiState.global,
     perCustomer: aiState.perCustomer,
     assignments,
+    convMeta,                                                         // last agent + closed flags
+    closed: Object.keys(convMeta).filter(sid => convMeta[sid] && convMeta[sid].closed),
+    online_agents: Array.from(onlineAgentIds()),
     notifications: notifications.filter(n => n.status === 'unread').length
   });
 });
@@ -999,9 +1125,29 @@ app.post('/api/toggle', requireAgent, (req, res) => {
 
 // POST /api/customer-needs-human  body: {session_id, sport}
 // Called by bot when customer clicks "Talk to a human" button OR auto-handoff fires.
+// Handles RECONNECTS: a customer who was previously handled (and whose chat may
+// have been closed) reappears here. We always reopen the conversation and route
+// it so it can be picked up again — back to the same agent if they are online,
+// otherwise freed to a different available agent / the Unclaimed queue.
 app.post('/api/customer-needs-human', botRateLimit(60), requireBot, (req, res) => {
   const { session_id, sport, type } = req.body || {};
   if (!session_id) return res.status(400).json({ ok: false, error: 'session_id required' });
+  const sportLc = String(sport || 'unknown').toLowerCase();
+
+  const meta = convMeta[session_id] || (convMeta[session_id] = {});
+  const wasClosed = !!meta.closed;
+  // Who handled this customer before? Prefer a still-live assignment, fall back
+  // to the remembered last agent (survives a close, which clears the assignment).
+  const prevAgentId = (assignments[session_id] && assignments[session_id].agent_id) || meta.lastAgentId || '';
+  const prevAgentName = (assignments[session_id] && assignments[session_id].agent_name) || meta.lastAgentName || '';
+  const isReconnect = wasClosed || !!prevAgentId;
+
+  // A returning customer must never stay hidden in "Closed" — reopen it so the
+  // team sees them again (in Unclaimed, or under whoever it gets routed to).
+  meta.closed = false;
+  meta.closedAt = null;
+  meta.closedBy = null;
+  meta.lastReconnectAt = new Date().toISOString();
 
   // Outside working hours: do NOT flip AI off (nobody is around to reply — the
   // customer would be stranded with a silent chat until morning). Log a
@@ -1011,7 +1157,7 @@ app.post('/api/customer-needs-human', botRateLimit(60), requireBot, (req, res) =
     const notif = {
       id: ++notificationId,
       session_id,
-      sport: String(sport || 'unknown').toLowerCase(),
+      sport: sportLc,
       type: 'after_hours_request',
       timestamp: new Date().toISOString(),
       status: 'unread'
@@ -1019,32 +1165,91 @@ app.post('/api/customer-needs-human', botRateLimit(60), requireBot, (req, res) =
     notifications.push(notif);
     while (notifications.length > 500) notifications.shift();
     saveStateDebounced();
-    console.log(`[notify] ${notif.sport}/${session_id} requested human AFTER HOURS — handoff suppressed`);
+    console.log(`[notify] ${sportLc}/${session_id} requested human AFTER HOURS — handoff suppressed${isReconnect ? ' (reconnect)' : ''}`);
     return res.json({
       ok: true,
       handoff: false,
       working_hours: false,
+      reconnect: isReconnect,
       message: AFTER_HOURS_MESSAGE,
       notification_id: notif.id
     });
   }
 
-  // Auto-flip per-customer toggle to OFF
+  // Working hours: hand the customer to a human (AI off for this session).
   aiState.perCustomer[session_id] = 'off';
-  // Push notification
+
+  // ----- Reconnect routing -----
+  let assignedTo = null;       // agent we routed to (null = left in Unclaimed)
+  let notifType = String(type || 'talk_to_human');
+  let systemNote = null;
+
+  if (isReconnect) {
+    const prevOnline = prevAgentId && isAgentOnline(prevAgentId);
+    if (prevOnline && RECONNECT_RETURN_TO_SAME_AGENT) {
+      // Same agent is around — route the customer straight back to them.
+      const u = findUser(prevAgentId);
+      assignedTo = { id: prevAgentId, name: (u && u.name) || prevAgentName || 'Agent' };
+      assignments[session_id] = { agent_id: assignedTo.id, agent_name: assignedTo.name, by: 'reconnect', at: new Date().toISOString() };
+      notifType = 'reconnect';
+      systemNote = '↩ Customer reconnected — routed back to ' + assignedTo.name + '.';
+    } else {
+      // Previous agent is unavailable. CLOSE OUT their stale engagement so the
+      // chat is no longer locked to them, then either auto-assign a different
+      // available agent or drop it into the Unclaimed queue.
+      if (assignments[session_id]) {
+        systemNote = '⚠ Previous agent (' + (prevAgentName || 'unknown') + ') unavailable — prior session closed.';
+        delete assignments[session_id];
+      }
+      const fallback = RECONNECT_AUTO_ASSIGN_FALLBACK ? pickAvailableAgent(prevAgentId) : null;
+      if (fallback) {
+        assignedTo = { id: fallback.id, name: fallback.name };
+        assignments[session_id] = { agent_id: fallback.id, agent_name: fallback.name, by: 'reconnect-reassign', at: new Date().toISOString() };
+        notifType = 'reconnect_assigned';
+        systemNote = (systemNote ? systemNote + ' ' : '') + '↪ Reassigned to ' + fallback.name + (prevAgentName ? (' (was ' + prevAgentName + ').') : '.');
+      } else {
+        notifType = 'reconnect';
+        systemNote = (systemNote ? systemNote + ' ' : '') + '📬 Returned to Unclaimed — waiting for an available agent.';
+      }
+    }
+  }
+
+  // Push the alert (carrying routing info for the dashboard).
   const notif = {
     id: ++notificationId,
     session_id,
-    sport: String(sport || 'unknown').toLowerCase(),
-    type: String(type || 'talk_to_human'),
+    sport: sportLc,
+    type: notifType,
+    reconnect: isReconnect,
+    to_agent_id: assignedTo ? assignedTo.id : null,
+    to_agent_name: assignedTo ? assignedTo.name : null,
+    from_agent_name: prevAgentName || null,
     timestamp: new Date().toISOString(),
     status: 'unread'
   };
   notifications.push(notif);
   while (notifications.length > 500) notifications.shift();
+
+  // Leave a breadcrumb in the conversation thread so agents see what happened.
+  if (systemNote) {
+    pushLog({
+      id: totalReceived + 1, received_at: new Date().toISOString(), timestamp: new Date().toISOString(),
+      sport: sportLc, session_id, user_query: '', ai_response: systemNote,
+      intent: 'reconnect', endpoint: '/api/customer-needs-human', source: 'system', agent_name: '', meta: ''
+    });
+  }
+
   saveStateDebounced();
-  console.log(`[notify] ${notif.sport}/${session_id} requested human (type=${notif.type})`);
-  res.json({ ok: true, handoff: true, working_hours: true, notification_id: notif.id });
+  console.log(`[notify] ${sportLc}/${session_id} requested human (type=${notifType}${isReconnect ? ', reconnect' : ''}${assignedTo ? ', -> ' + assignedTo.name : ', -> unclaimed'})`);
+  res.json({
+    ok: true,
+    handoff: true,
+    working_hours: true,
+    reconnect: isReconnect,
+    reassigned_to: assignedTo ? assignedTo.name : null,
+    status: assignedTo ? 'assigned' : 'unclaimed',
+    notification_id: notif.id
+  });
 });
 
 // POST /api/human-message  body: {session_id, text, agent_name, sport}

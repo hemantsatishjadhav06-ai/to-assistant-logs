@@ -580,19 +580,28 @@ function _updateTitleBadge(count) { document.title = count > 0 ? ('(' + count + 
 function alertNewHandoff(fresh) {
   if (!fresh || !fresh.length) return;
   const myId = ((State.agent && State.agent.id) || '').toLowerCase();
-  const mineXfers = fresh.filter(n => n.type === 'transfer' && (n.to_agent_id || '').toLowerCase() === myId);
-  const handoffs = fresh.filter(n => n.type !== 'transfer');
-  if (mineXfers.length) {
+  // Alerts routed to a specific agent (transfer, or a reconnect assigned to me).
+  const routedToMe = fresh.filter(n => (n.to_agent_id || '').toLowerCase() === myId &&
+    ['transfer', 'reconnect', 'reconnect_assigned'].includes(n.type));
+  // Unassigned requests = customers actually waiting in Unclaimed.
+  const handoffs = fresh.filter(n => n.type !== 'transfer' && !n.to_agent_id);
+  if (routedToMe.length) {
     _beep();
-    const x = mineXfers[mineXfers.length - 1];
-    _desktopNotify('Chat transferred to you', (x.from_agent_name || 'An agent') + ' transferred a ' + (x.sport || '') + ' chat to you.');
-    toast('🔁 ' + (x.from_agent_name || 'An agent') + ' transferred a chat to you', 'ok');
+    const x = routedToMe[routedToMe.length - 1];
+    if (x.type === 'transfer') {
+      _desktopNotify('Chat transferred to you', (x.from_agent_name || 'An agent') + ' transferred a ' + (x.sport || '') + ' chat to you.');
+      toast('🔁 ' + (x.from_agent_name || 'An agent') + ' transferred a chat to you', 'ok');
+    } else {
+      _desktopNotify('Customer reconnected', 'A ' + (x.sport || '') + ' customer you handled is back.');
+      toast('↩ A customer you handled reconnected', 'ok');
+    }
   }
   if (handoffs.length) {
     _beep();
     const n = handoffs[handoffs.length - 1];
+    const reconnects = handoffs.filter(h => h.reconnect).length;
     _desktopNotify('New support request', 'A ' + (n.sport || '') + ' customer needs a human agent.');
-    toast('🔔 ' + handoffs.length + ' customer' + (handoffs.length > 1 ? 's' : '') + ' waiting for an agent', 'err');
+    toast('🔔 ' + handoffs.length + ' customer' + (handoffs.length > 1 ? 's' : '') + ' waiting for an agent' + (reconnects ? ' (' + reconnects + ' reconnect' + (reconnects > 1 ? 's' : '') + ')' : ''), 'err');
   }
 }
 function enableAlerts() {
@@ -657,6 +666,15 @@ async function refreshAll() {
     State.logs = logsRes.logs || [];
     State.aiState = { global: stateRes.global || {}, perCustomer: stateRes.perCustomer || {} };
     State.assignments = stateRes.assignments || {};
+    State.convMeta = stateRes.convMeta || {};
+    State.onlineAgents = new Set((stateRes.online_agents || []).map(x => String(x).toLowerCase()));
+    // Closed state is now server-authoritative: a customer who reconnects is
+    // reopened on the server, so the dashboard drops them out of "Closed" and
+    // they reappear in Unclaimed automatically on the next poll.
+    if (Array.isArray(stateRes.closed)) {
+      State.closedSids = new Set(stateRes.closed);
+      _persistClosed();
+    }
     if (notifRes.notifications && notifRes.notifications.length) {
       const seen = new Set(State.notifications.map(n => n.id));
       const fresh = [];
@@ -1088,12 +1106,14 @@ async function closeConversation() {
   if (!sid) return;
   const c = State.conversations.find(x => x.session_id === sid);
   if (!c) return;
-  if (!confirm('Close this conversation?\n\nIt will move to "Closed" and AI will be turned back ON for this customer.')) return;
+  if (!confirm('Close this conversation?\n\nIt will move to "Closed" and AI will be turned back ON for this customer.\n\nIf the customer asks for a human again, the chat reopens and returns to Unclaimed.')) return;
   try {
-    // Hand AI back on (idempotent — no-op if already on)
-    await api('/api/toggle', { method:'POST', body: JSON.stringify({ scope:'session', id: sid, value:'on' })}).catch(()=>{});
+    // Server-authoritative close: frees the assignment, resumes AI, clears the
+    // waiting alert, and remembers the last agent for reconnect routing.
+    await api('/api/close', { method:'POST', body: JSON.stringify({ session_id: sid, sport: c.sport })});
     State.aiState.perCustomer[sid] = 'on';
-    State.closedSids.add(sid);
+    if (State.assignments) delete State.assignments[sid];
+    State.closedSids.add(sid);            // optimistic — server confirms on next poll
     _persistClosed();
     toast('Conversation closed', 'ok');
     // Jump to next conversation in current view
@@ -1104,6 +1124,7 @@ async function closeConversation() {
       State.selectedSid = list[0].session_id;
     }
     render();
+    refreshAll();
   } catch (e) {
     toast('Close failed: '+e.message, 'err');
   }
@@ -1111,10 +1132,17 @@ async function closeConversation() {
 async function reopenConversation() {
   const sid = State.selectedSid;
   if (!sid) return;
-  State.closedSids.delete(sid);
+  try {
+    await api('/api/reopen', { method:'POST', body: JSON.stringify({ session_id: sid })});
+  } catch (e) {
+    toast('Reopen failed: '+e.message, 'err');
+    return;
+  }
+  State.closedSids.delete(sid);          // optimistic — server confirms on next poll
   _persistClosed();
   toast('Conversation reopened', 'ok');
   render();
+  refreshAll();
 }
 async function setSessionAi(on) {
   const c = State.conversations.find(x => x.session_id === State.selectedSid);

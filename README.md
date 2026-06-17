@@ -28,6 +28,8 @@ Each bot fires a non-blocking POST to `/log` after every user query + AI respons
 | `GET`    | `/api/agents` | List agents for the transfer picker (agent) |
 | `POST`   | `/api/claim` | Claim/assign a conversation to yourself (agent) |
 | `POST`   | `/api/transfer` | Transfer a conversation to another agent (agent) |
+| `POST`   | `/api/close` | Close a conversation — frees the assignment, resumes AI, acks the waiting alert, remembers the last agent (agent) |
+| `POST`   | `/api/reopen` | Reopen a closed conversation (agent) |
 | `GET`    | `/api/logs/test-summary` | Count automated test/QA entries (admin) |
 | `POST`   | `/api/logs/purge-test` | Permanently delete test/QA entries (admin, confirm-gated) |
 
@@ -43,6 +45,16 @@ Each bot fires a non-blocking POST to `/log` after every user query + AI respons
 - **Attachments** — 📎 in the reply box uploads an image, PDF or document and drops a shareable link into the reply (also previewed in the thread).
 - **Transfer to an agent** — 🔁 reassigns a live chat to a teammate; pauses AI, notifies them, and logs an internal note.
 - **Hide / purge test data** — a 🧪 *Hide test data* toggle keeps automated QA/CI/test conversations out of the console; admins can permanently purge them from **/admin** → *Clean up test data*. Real `c_…` customer chats are always kept.
+
+## Reconnect & reassignment
+
+When a customer who was handled before asks for a human again (`POST /api/customer-needs-human`), the conversation is **reopened** and routed so it is never lost or stuck on an unavailable agent:
+
+- **Closing.** Any stale assignment from the previous engagement is closed out. Closing a chat (`/api/close`) frees the assignment, turns AI back on for the customer, clears the "waiting" alert, and remembers who last handled it.
+- **Same agent if available.** If the agent who handled the customer is still online, the chat is routed straight back to them (continuity). Toggle off with `RECONNECT_RETURN_TO_SAME_AGENT=off`.
+- **Different agent if not.** If that agent is offline, the chat is **not** locked to them. By default it returns to the **Unclaimed** queue so any other available agent can pick it up. Set `RECONNECT_AUTO_ASSIGN_FALLBACK=on` to instead auto-assign the least-loaded *other* online agent.
+- **Reopen in Unclaimed.** Because close state is now server-side, a closed chat that reconnects automatically leaves "Closed" and reappears in the dashboard (Unclaimed, or under whoever it was routed to) on the next poll.
+- *"Online"* means the agent currently has a live dashboard login session. Outside working hours the handoff is still suppressed (AI stays on), but the chat is reopened so the team sees it when they return.
 
 ## Setting up Zoho SalesIQ → /zoho webhook
 
@@ -77,3 +89,5 @@ In-memory ring buffer. Keeps the last `MAX_ENTRIES` (default 5000) entries. Pers
 | `MAX_ENTRIES` | no | `5000` | Ring buffer cap |
 | `ADMIN_KEY` | no | (unset) | Required to use `DELETE /api/logs` |
 | `NODE_ENV` | no | `production` | |
+| `RECONNECT_RETURN_TO_SAME_AGENT` | no | `on` | Route a reconnecting customer back to their previous agent if that agent is online |
+| `RECONNECT_AUTO_ASSIGN_FALLBACK` | no | `off` | If the previous agent is offline, auto-assign the next available agent instead of using the Unclaimed queue |
