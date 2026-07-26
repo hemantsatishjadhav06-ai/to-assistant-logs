@@ -364,7 +364,7 @@ a { color: inherit; }
       <div class="nav-item" id="navAudit" style="display:none;" onclick="openAudit()"><span class="ico">📜</span> Audit log</div>
       <div class="nav-item" onclick="openInsights()"><span class="ico">📊</span> Insights</div>
       <div class="nav-item" id="navOps" style="display:none;" onclick="openOps()"><span class="ico">🩺</span> Ops Monitor</div>
-      <div class="nav-item" id="navAdmin" style="display:none;" onclick="location.href='/admin'"><span class="ico">👥</span> Manage agents</div>
+      <div class="nav-item" id="navAdmin" style="display:none;" onclick="location.href=OutletSupportConfig.pageUrl('admin.html')"><span class="ico">👥</span> Manage agents</div>
     </div>
   </aside>
 
@@ -505,6 +505,7 @@ a { color: inherit; }
 
 <div class="toast" id="toast"><span class="toast-dot"></span><span id="toastText"></span></div>
 
+<script src="./app-config.js"></script>
 <script>
 /* =============================================================
    OutletSupport v3 — wired to the to-assistant-logs backend
@@ -534,10 +535,15 @@ function _persistClosed() { localStorage.setItem('os.closedSids', JSON.stringify
 /* ---------- API helpers ---------- */
 async function api(path, opts = {}) {
   opts.credentials = 'include';
-  opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
-  const r = await fetch(path, opts);
+  opts.headers = Object.assign(
+    { 'Content-Type': 'application/json' },
+    OutletSupportConfig.authHeaders(),
+    opts.headers || {}
+  );
+  const r = await fetch(OutletSupportConfig.apiUrl(path), opts);
   if (r.status === 401) {
-    window.location.href = '/login';
+    OutletSupportConfig.clearSession();
+    window.location.href = OutletSupportConfig.pageUrl('login.html');
     throw new Error('unauthorized');
   }
   const txt = await r.text();
@@ -1269,7 +1275,8 @@ function onNotifClick() {
 async function logout(e) {
   if (e) e.preventDefault();
   await api('/api/logout', { method:'POST' }).catch(() => {});
-  window.location.href = '/login';
+  OutletSupportConfig.clearSession();
+  window.location.href = OutletSupportConfig.pageUrl('login.html');
 }
 
 /* ---------- Theme ---------- */
@@ -1883,17 +1890,24 @@ async function uploadOneFile(file) {
   if (file.size > 20 * 1024 * 1024) { toast(file.name + ' is over 20 MB', 'err'); return; }
   toast('Uploading ' + file.name + '…', 'ok');
   try {
-    const r = await fetch('/api/upload', {
+    const r = await fetch(OutletSupportConfig.apiUrl('/api/upload'), {
       method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },
+      headers: Object.assign(
+        { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },
+        OutletSupportConfig.authHeaders()
+      ),
       body: file
     });
-    if (r.status === 401) { window.location.href = '/login'; return; }
+    if (r.status === 401) {
+      OutletSupportConfig.clearSession();
+      window.location.href = OutletSupportConfig.pageUrl('login.html');
+      return;
+    }
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status));
     const ta = document.getElementById('replyText');
     if (ta) {
-      const link = location.origin + d.url;
+      const link = OutletSupportConfig.apiUrl(d.url);
       const prefix = (ta.value && !/\n$/.test(ta.value)) ? '\n' : '';
       ta.value += prefix + '📎 ' + d.name + ': ' + link + '\n';
       ta.focus();

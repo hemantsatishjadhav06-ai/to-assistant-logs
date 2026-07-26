@@ -21,6 +21,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const MAX_ENTRIES = parseInt(process.env.MAX_ENTRIES || '50000', 10);  // bumped — disk-backed now
 const ADMIN_KEY = process.env.ADMIN_KEY || '';
+const DEFAULT_FRONTEND_ORIGIN = 'https://hemantsatishjadhav06-ai.github.io';
+const FRONTEND_ORIGINS = new Set(
+  (process.env.FRONTEND_ORIGINS || DEFAULT_FRONTEND_ORIGIN)
+    .split(',')
+    .map(value => value.trim().replace(/\/+$/, ''))
+    .filter(Boolean)
+);
 
 // ===== AUTH (v3.0) =====
 // DASHBOARD_PASSWORD: shared password for all support agents. Required to log in.
@@ -87,8 +94,13 @@ function safeEqStr(a, b) {
   try { return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b)); } catch { return false; }
 }
 function newSessionId() { return crypto.randomBytes(32).toString('hex'); }
+function getSessionId(req) {
+  const headerSid = String(req.headers['x-agent-session'] || '').trim();
+  if (/^[a-f0-9]{64}$/i.test(headerSid)) return headerSid;
+  return parseCookies(req)['to_session'] || '';
+}
 function getSession(req) {
-  const sid = parseCookies(req)['to_session'];
+  const sid = getSessionId(req);
   if (!sid) return null;
   const sess = sessions.get(sid);
   if (!sess) return null;
@@ -190,7 +202,7 @@ setInterval(() => {
 }, 60_000).unref();
 
 // Audit log — append-only JSONL
-const AUDIT_FILE = path.join(process.env.LOGS_DATA_DIR || '/var/data', 'audit.jsonl');
+const AUDIT_FILE = path.join(DATA_DIR, 'audit.jsonl');
 function audit(req, action, target, before, after) {
   try {
     const sess = (typeof getSession === 'function') ? getSession(req) : null;
@@ -211,11 +223,15 @@ function audit(req, action, target, before, after) {
 }
 
 
-// CORS: same-origin XHR (dashboard JS calling its own API) doesn't need CORS.
-// Bot calls send credentials in Authorization header, not cookies — also fine.
-// Restrict to specific origins to prevent cross-origin reads of customer logs.
+// The dashboard is served both same-origin and from the GitHub Pages frontend.
+// Only the explicitly configured Pages origin may read authenticated customer data.
 app.use(cors({
-  origin: false,            // disallow cross-origin browsers from reading
+  origin(origin, callback) {
+    if (!origin || FRONTEND_ORIGINS.has(String(origin).replace(/\/+$/, ''))) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '1mb' }));
@@ -640,12 +656,12 @@ app.post('/api/login', (req, res) => {
   loginAttempts.delete(ip);
   setCookie(res, 'to_session', sid, { maxAge: SESSION_TTL_MS / 1000 });
   console.log(`[auth] login ok: id="${sess.id}" role=${sess.role} ip=${ip}`);
-  res.json({ ok: true, agent_name: sess.agent_name, role: sess.role });
+  res.json({ ok: true, agent_name: sess.agent_name, role: sess.role, session_token: sid });
 });
 
 // POST /api/logout — clears session
 app.post('/api/logout', (req, res) => {
-  const sid = parseCookies(req)['to_session'];
+  const sid = getSessionId(req);
   if (sid) sessions.delete(sid);
   setCookie(res, 'to_session', '', { maxAge: 0 });
   res.json({ ok: true });
@@ -1057,7 +1073,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.get('/debug/test', (req, res) => {
+app.get('/debug/test', requireAdmin, (req, res) => {
   const sport = (req.query.sport || 'tennis').toString().toLowerCase();
   pushLog({
     id: totalReceived + 1,

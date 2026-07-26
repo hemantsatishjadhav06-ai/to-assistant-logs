@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "check": "node --check server.js && node --check ops-monitor.js",
+    "test": "node test_statusfor.mjs && node test_reconnect.mjs"
   },
   "dependencies": {
     "express": "^4.18.2",

@@ -33,6 +33,16 @@ async function login(base, id, password) {
   if (!m) throw new Error('login failed for ' + id + ': ' + (await r.text()));
   return 'to_session=' + m[1];
 }
+async function loginToken(base, id, password) {
+  const r = await fetch(base + '/api/login', {
+    method: 'POST',
+    headers: { origin: 'https://hemantsatishjadhav06-ai.github.io', 'content-type': 'application/json' },
+    body: JSON.stringify({ id, password })
+  });
+  const body = await r.json();
+  if (!r.ok || !body.session_token) throw new Error('token login failed for ' + id);
+  return { token: body.session_token, allowOrigin: r.headers.get('access-control-allow-origin') };
+}
 const aGet = (base, c, p) => fetch(base + p, { headers: { cookie: c } }).then(r => r.json());
 const aPost = (base, c, p, b) => fetch(base + p, { method: 'POST', headers: { cookie: c, 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
 const bPost = (base, p, b) => fetch(base + p, { method: 'POST', headers: { authorization: 'Bearer ' + BOT_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
@@ -44,6 +54,27 @@ async function run() {
   let a1 = await login(base, 'agent1', 'pass1');
   let a2 = await login(base, 'agent2', 'pass2');
   const SID = 'c_alice';
+
+  console.log('\n[Pages auth] GitHub frontend origin + header session');
+  const preflight = await fetch(base + '/api/me', {
+    method: 'OPTIONS',
+    headers: {
+      origin: 'https://hemantsatishjadhav06-ai.github.io',
+      'access-control-request-method': 'GET',
+      'access-control-request-headers': 'x-agent-session'
+    }
+  });
+  ok(preflight.status === 204, 'Pages CORS preflight succeeds');
+  ok(preflight.headers.get('access-control-allow-origin') === 'https://hemantsatishjadhav06-ai.github.io', 'Pages origin is explicitly allowed');
+  const pageLogin = await loginToken(base, 'pages-admin', 'master');
+  ok(pageLogin.token.length === 64, 'login returns a 64-character agent session token');
+  ok(pageLogin.allowOrigin === 'https://hemantsatishjadhav06-ai.github.io', 'login response is readable by Pages');
+  const pageMe = await fetch(base + '/api/me', {
+    headers: { origin: 'https://hemantsatishjadhav06-ai.github.io', 'x-agent-session': pageLogin.token }
+  });
+  ok(pageMe.ok && (await pageMe.json()).id === 'pages-admin', 'header session authenticates the Pages dashboard');
+  const publicDebug = await fetch(base + '/debug/test?sport=tennis');
+  ok(publicDebug.status === 401, 'synthetic log injector is no longer public');
 
   console.log('\n[0] Presence: both logged-in agents are counted online');
   let stp = await aGet(base, a2, '/api/state-all');

@@ -120,6 +120,7 @@
 
   <footer>Sessions expire after 24 hours.</footer>
 </form>
+<script src="./app-config.js"></script>
 <script>
 const form = document.getElementById('loginForm');
 const btn = document.getElementById('submitBtn');
@@ -135,10 +136,10 @@ form.addEventListener('submit', async e => {
   hideError();
   btn.disabled = true; btn.textContent = 'Signing in…';
   try {
-    const r = await fetch('/api/login', {
+    const r = await fetch(OutletSupportConfig.apiUrl('/api/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
+      credentials: 'include',
       body: JSON.stringify({
         id: document.getElementById('login_id').value.trim(),
         password: document.getElementById('password').value
@@ -146,7 +147,8 @@ form.addEventListener('submit', async e => {
     });
     const d = await r.json().catch(() => ({}));
     if (r.ok && d.ok) {
-      window.location.href = '/';
+      OutletSupportConfig.setSessionToken(d.session_token || '');
+      window.location.href = OutletSupportConfig.pageUrl('index.html');
       return;
     }
     if (r.status === 429) showError('Too many attempts. Please wait a minute and try again.');
@@ -161,8 +163,11 @@ form.addEventListener('submit', async e => {
   }
 });
 // If already logged in, bounce to dashboard
-fetch('/api/me', { credentials: 'same-origin' }).then(r => {
-  if (r.ok) window.location.href = '/';
+fetch(OutletSupportConfig.apiUrl('/api/me'), {
+  credentials: 'include',
+  headers: OutletSupportConfig.authHeaders()
+}).then(r => {
+  if (r.ok) window.location.href = OutletSupportConfig.pageUrl('index.html');
 }).catch(() => {});
 </script>
 </body>

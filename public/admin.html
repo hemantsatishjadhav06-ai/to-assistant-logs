@@ -52,7 +52,7 @@
 <div class="topbar">
   <div class="logo">O</div>
   <h1>OutletSupport — Team management</h1>
-  <div class="right"><a href="/">← Back to console</a></div>
+  <div class="right"><a href="/" id="consoleLink">← Back to console</a></div>
 </div>
 
 <div id="gate" class="gate">Checking access…</div>
@@ -72,7 +72,7 @@
       <div><label for="f_id">Login ID</label><input id="f_id" placeholder="e.g. agent4" autocomplete="off" /></div>
       <div><label for="f_name">Display name</label><input id="f_name" placeholder="e.g. Priya" autocomplete="off" /></div>
       <div><label for="f_role">Role</label><select id="f_role"><option value="agent">Agent</option><option value="admin">Admin</option></select></div>
-      <div><label for="f_pw">Password</label><input id="f_pw" type="text" placeholder="min 6 characters" autocomplete="off" /></div>
+      <div><label for="f_pw">Password</label><input id="f_pw" type="password" placeholder="min 6 characters" autocomplete="new-password" /></div>
     </div>
     <button class="btn-primary" id="createBtn">Create profile</button>
     <div class="hint">Note: profiles created here last until the next redeploy unless a persistent disk is attached. The seeded admin + agents always survive.</div>
@@ -114,10 +114,18 @@
   </div>
 </div>
 
+<script src="./app-config.js"></script>
 <script>
+document.getElementById('consoleLink').href = OutletSupportConfig.pageUrl('index.html');
 async function api(path, opts) {
-  const r = await fetch(path, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, opts || {}));
-  return r;
+  opts = opts || {};
+  opts.credentials = 'include';
+  opts.headers = Object.assign(
+    { 'Content-Type': 'application/json' },
+    OutletSupportConfig.authHeaders(),
+    opts.headers || {}
+  );
+  return fetch(OutletSupportConfig.apiUrl(path), opts);
 }
 function showMsg(text, ok) {
   const m = document.getElementById('msg');
@@ -268,9 +276,14 @@ document.getElementById('rescanBtn').addEventListener('click', loadTestSummary);
 (async function init() {
   let me;
   try { const r = await api('/api/me'); me = r.ok ? await r.json() : null; } catch (e) { me = null; }
-  if (!me || !me.ok) { location.href = '/login'; return; }
+  if (!me || !me.ok) {
+    OutletSupportConfig.clearSession();
+    location.href = OutletSupportConfig.pageUrl('login.html');
+    return;
+  }
   if (me.role !== 'admin') {
-    document.getElementById('gate').innerHTML = 'This page is for admins only.<br><a href="/" style="color:var(--brand-deep);">Back to console</a>';
+    document.getElementById('gate').innerHTML = 'This page is for admins only.<br><a id="adminBackLink" style="color:var(--brand-deep);">Back to console</a>';
+    document.getElementById('adminBackLink').href = OutletSupportConfig.pageUrl('index.html');
     return;
   }
   document.getElementById('gate').style.display = 'none';

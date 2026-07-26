@@ -2,8 +2,9 @@ services:
   - type: web
     name: to-assistant-logs
     runtime: node
-    buildCommand: npm install
-    startCommand: node server.js
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
     envVars:
       - key: PORT
         value: 3000
@@ -13,3 +14,11 @@ services:
         value: 5000
       - key: ADMIN_KEY
         sync: false
+      - key: BOT_AUTH_TOKEN
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: AGENT_USERS
+        sync: false
+      - key: FRONTEND_ORIGINS
+        value: https://hemantsatishjadhav06-ai.github.io
